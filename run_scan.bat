@@ -20,6 +20,7 @@ if errorlevel 1 (
 
 git add docs/data
 git commit -m "scan %date%" >nul 2>&1
+git pull --rebase -X theirs --no-edit
 git push
 
 echo.

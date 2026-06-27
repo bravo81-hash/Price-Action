@@ -13,6 +13,7 @@ fi
 
 git add docs/data
 git commit -m "scan $(date +%F)" >/dev/null 2>&1
+git pull --rebase -X theirs --no-edit
 git push
 
 echo "Done. Dashboard: https://bravo81-hash.github.io/Price-Action/"
