@@ -27,6 +27,27 @@ def _read_tables(url):
         # pandas can pass headers via storage_options on newer versions
         return pd.read_html(url, storage_options=_HEADERS)
 
+
+# Wikipedia 403s datacenter IPs (GitHub Actions) even with a browser UA. This
+# Frictionless dataset is reliably reachable from cloud runners and stays current.
+_GH_SP500_CSV = ("https://raw.githubusercontent.com/datasets/"
+                 "s-and-p-500-companies/main/data/constituents.csv")
+
+
+def _github_sp500():
+    """Cloud-reachable S&P 500 fallback source. Returns a symbol list or None."""
+    try:
+        import requests
+        r = requests.get(_GH_SP500_CSV, headers=_HEADERS, timeout=20)
+        r.raise_for_status()
+        df = pd.read_csv(io.StringIO(r.text))
+        col = "Symbol" if "Symbol" in df.columns else df.columns[0]
+        syms = [str(s).replace(".", "-").strip().upper() for s in df[col].tolist()]
+        syms = [s for s in syms if s and s.isascii() and 1 <= len(s) <= 6]
+        return syms if len(syms) > 400 else None
+    except Exception:
+        return None
+
 LIQUID_ETFS = [
     "SPY", "QQQ", "IWM", "DIA", "XLF", "XLK", "XLE", "XLV", "XLI", "XLY",
     "XLP", "XLU", "XLB", "XLRE", "XLC", "SMH", "SOXX", "ARKK", "GLD", "SLV",
@@ -69,21 +90,40 @@ def _wiki_symbols(url, candidate_cols):
     raise ValueError(f"no symbol column in {url}")
 
 
+def _wiki_safe(url, cols):
+    try:
+        return _wiki_symbols(url, cols)
+    except Exception:
+        return None
+
+
 def build_universe(verbose=True):
+    """S&P 500 + NASDAQ-100 + liquid ETFs, resilient to a Wikipedia 403.
+
+    Order of preference for the S&P 500: Wikipedia (authoritative, current) ->
+    GitHub Frictionless dataset (cloud-reachable) -> bundled large-cap subset.
+    NASDAQ-100 comes from Wikipedia when reachable; otherwise the bundled
+    growth/large-cap list supplements the major non-S&P names (ASML, ARM, ...).
+    """
     syms = set(LIQUID_ETFS)
-    try:
-        syms |= set(_wiki_symbols(_SP500_URL, ["Symbol", "Ticker"]))
-        if verbose:
-            print("[universe] S&P 500 constituents loaded")
-    except Exception as e:
-        if verbose:
-            print(f"[universe] S&P 500 fetch failed ({e}); using fallback large-cap subset")
-        syms |= set(FALLBACK_STOCKS)
-    try:
-        syms |= set(_wiki_symbols(_NDX_URL, ["Ticker", "Symbol"]))
-        if verbose:
-            print("[universe] NASDAQ-100 constituents loaded")
-    except Exception as e:
-        if verbose:
-            print(f"[universe] NASDAQ-100 fetch failed ({e}); continuing")
+
+    sp = _wiki_safe(_SP500_URL, ["Symbol", "Ticker"])
+    if sp:
+        src = "wikipedia"
+    else:
+        sp = _github_sp500()
+        if sp:
+            src = "github-dataset (wikipedia 403)"
+        else:
+            sp, src = FALLBACK_STOCKS, "bundled subset (all fetches failed)"
+    syms |= set(sp)
+
+    ndx = _wiki_safe(_NDX_URL, ["Ticker", "Symbol"])
+    if ndx:
+        syms |= set(ndx)
+    else:
+        syms |= set(FALLBACK_STOCKS)   # covers major NDX/growth names off-Wikipedia
+
+    if verbose:
+        print(f"[universe] {len(syms)} symbols (S&P 500 via {src})")
     return sorted(syms)
