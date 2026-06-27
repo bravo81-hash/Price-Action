@@ -16,6 +16,14 @@ a recent daily pullback to/through the daily EMA20, then a daily close beyond th
 prior-7-day Donchian extreme in the trend direction. Volume ≥1.2×20d avg adds to
 the score. Mirror logic for downtrends (short).
 
+**S3 — Range / chop (neutral).** A *non*-directional setup: the ticker is not
+trending (ADX < `s3_adx_max`), its fast/slow EMAs are flat, and price sits in the
+middle band of a well-formed range (width within `s3_min/max_width_pct`, position
+`s3_pos_low..s3_pos_high`). Side = **neutral**; it routes to the neutral matrix
+row → **Calendar** (cheap vol) or **Iron Condor** (fair/rich vol). S3 is mutually
+exclusive with S1/S2 by construction (mid-range ≠ at a level ≠ breakout). Disable
+with `--no-neutral`.
+
 Liquidity gate: last price ≥ $10 and 20-day average dollar volume ≥ $20M.
 Universe: S&P 500 + NASDAQ 100 (live from Wikipedia) + a curated liquid ETF list.
 

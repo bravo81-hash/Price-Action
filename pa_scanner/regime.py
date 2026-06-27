@@ -111,12 +111,20 @@ def strategy(direction: str, vol_state: str):
 
 
 def signal_direction(side: str) -> str:
-    """A fired signal is directional: long -> bullish row, short -> bearish row."""
-    return "bullish" if side == "long" else "bearish"
+    """A fired signal is directional: long -> bullish row, short -> bearish row.
+    A neutral (range/chop) signal maps to the neutral row."""
+    if side == "long":
+        return "bullish"
+    if side == "short":
+        return "bearish"
+    return "neutral"
 
 
 def alignment(regime_dir: str, side: str) -> str:
-    """How the signal sits versus the trend regime: 'with' | 'counter' | 'neutral'."""
+    """How a directional signal sits versus the trend regime: 'with' | 'counter'.
+    Neutral (range) signals have no tape direction -> 'neutral'."""
+    if side not in ("long", "short"):
+        return "neutral"
     if regime_dir == "neutral":
         return "neutral"
     return "with" if signal_direction(side) == regime_dir else "counter"

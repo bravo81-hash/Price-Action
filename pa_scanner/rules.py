@@ -93,3 +93,34 @@ class TrendPullbackBreakout:
                            "volx": round(volx, 2), "pullback_pct": round(ctx.pullback_dn_depth * 100, 1)})
 
         return Signal(False, None, 0.0, "")
+
+
+@register
+class RangeChopNeutral:
+    code = "S3"
+    name = "Range / chop (neutral)"
+
+    def evaluate(self, ctx) -> Signal:
+        from .config import CFG
+        if not CFG.allow_neutral:
+            return Signal(False, None, 0.0, "")
+        # not trending, flat EMAs, price contained in the mid-band of a real range
+        if ctx.adx_last >= CFG.s3_adx_max:
+            return Signal(False, None, 0.0, "")
+        if ctx.ema_sep_pct > CFG.s3_ema_flat_pct:
+            return Signal(False, None, 0.0, "")
+        if not (CFG.s3_min_width_pct <= ctx.range_width_pct <= CFG.s3_max_width_pct):
+            return Signal(False, None, 0.0, "")
+        if not (CFG.s3_pos_low <= ctx.range_pos <= CFG.s3_pos_high):
+            return Signal(False, None, 0.0, "")
+
+        chop = _clip01(1 - ctx.adx_last / CFG.s3_adx_max)
+        center = _clip01(1 - abs(ctx.range_pos - 0.5) * 2)
+        osc = _clip01(ctx.range_crosses / 6.0)
+        score = _clip01(0.5 * chop + 0.3 * center + 0.2 * osc)
+        return Signal(True, "neutral", score,
+                      f"range {ctx.range_lo:.2f}-{ctx.range_hi:.2f} (mid)",
+                      {"range_lo": round(ctx.range_lo, 2), "range_hi": round(ctx.range_hi, 2),
+                       "range_pos": round(ctx.range_pos, 2), "adx": round(ctx.adx_last, 1),
+                       "width_pct": round(ctx.range_width_pct * 100, 1),
+                       "crosses": ctx.range_crosses})

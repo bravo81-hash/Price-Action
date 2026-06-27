@@ -38,9 +38,19 @@ class Config:
     s2_vol_window: int = 20
     s2_vol_mult: float = 1.2            # volume-expansion bonus threshold
 
+    # --- Signal 3: range / chop (neutral) ---
+    s3_adx_max: float = 20.0           # ADX below this = not trending
+    s3_range_window: int = 20          # window defining the range
+    s3_pos_low: float = 0.30           # price must sit in the mid-band of the range
+    s3_pos_high: float = 0.70
+    s3_min_width_pct: float = 0.04     # range wide enough to be tradeable (>=4%)
+    s3_max_width_pct: float = 0.25     # but not a blow-off (<=25%)
+    s3_ema_flat_pct: float = 0.015     # |emaFast - emaSlow| / price < this = flat
+
     # --- direction ---
     allow_long: bool = True
     allow_short: bool = True
+    allow_neutral: bool = True          # S3 range/chop signals
 
     # --- regime: direction read (price-only, all environments) ---
     ema_slow_daily: int = 50

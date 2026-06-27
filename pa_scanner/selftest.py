@@ -13,7 +13,7 @@ from . import candles as cnd
 from . import indicators as ind
 from . import data as dl
 from .scanner import prepare_context, SymbolContext, add_regime
-from .rules import ReversalAtWeeklyLevel, TrendPullbackBreakout
+from .rules import ReversalAtWeeklyLevel, TrendPullbackBreakout, RangeChopNeutral
 from .regime import VolInputs, direction_read, vol_read, strategy, signal_direction, alignment
 from .report import write_report
 
@@ -65,6 +65,21 @@ def make_s2(direction="long", n=400, slope=0.25, start=50.0):
         low[n - 1] = brk - 0.5
         high[n - 1] = base[n - 1] + 1.0          # still below ema20
 
+    openp = np.empty(n)
+    openp[0] = close[0]
+    openp[1:] = close[:-1]
+    return _frame(close, high, low, openp)
+
+
+def make_range(n=400):
+    """Range-bound, low-ADX series with the last bar mid-range (for S3)."""
+    base = 100 + 3.0 * np.sin(np.arange(n) / 1.6)   # high-frequency -> low ADX
+    close = base.astype(float)
+    high = close + 0.4
+    low = close - 0.4
+    close[-1] = 100.0          # land mid-range so the position gate passes
+    high[-1] = 100.4
+    low[-1] = 99.6
     openp = np.empty(n)
     openp[0] = close[0]
     openp[1:] = close[:-1]
@@ -212,6 +227,23 @@ def main():
     check("short signal in bull regime -> counter", erows[1]["align"] == "counter")
     check("short-signal structure is bearish (not bullish)",
           erows[1]["structure"] in ("Long Put (D)", "Call Credit Spread (C)"))
+
+    print("S3 range/chop (pipeline + neutral structure)")
+    rng_df = make_range()
+    ctx_r = prepare_context("RNG", rng_df, dl.to_weekly(rng_df))
+    check("context built (range)", ctx_r is not None)
+    check("low ADX detected", ctx_r.adx_last < CFG.s3_adx_max)
+    check("price mid-range", CFG.s3_pos_low <= ctx_r.range_pos <= CFG.s3_pos_high)
+    s3 = RangeChopNeutral().evaluate(ctx_r)
+    check("S3 fires on range (neutral side)", s3.hit and s3.side == "neutral")
+    up_ctx = prepare_context("UP", make_s2("long"), dl.to_weekly(make_s2("long")))
+    check("S3 silent on a trend", not RangeChopNeutral().evaluate(up_ctx).hit)
+    nb = {"RNG": (rng_df, dl.to_weekly(rng_df))}
+    nrows = [{"ticker": "RNG", "signal": "S3", "side": "neutral", "score": 0.7,
+              "last": 100, "atr": 2, "spark": [1, 2]}]
+    add_regime(nrows, nb, iv_enrich=False)
+    check("neutral signal -> neutral structure", nrows[0]["structure"] in ("Calendar (D)", "Iron Condor (C)"))
+    check("neutral signal -> align neutral", nrows[0]["align"] == "neutral")
 
     print(f"\n{len(PASS)} passed, {len(FAIL)} failed")
     if FAIL:

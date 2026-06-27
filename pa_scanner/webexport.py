@@ -21,10 +21,14 @@ def _row(r: dict) -> dict:
         d["detail"] = r.get("pattern", "")
         d["dist"] = r.get("dist_atr", "")
         d["volx"] = ""
-    else:
+    elif r.get("signal") == "S2":
         d["detail"] = f"pullback {r.get('pullback_pct', '')}%"
         d["dist"] = r.get("breakout_atr", "")
         d["volx"] = r.get("volx", "")
+    else:  # S3 range / chop
+        d["detail"] = r.get("label", "")
+        d["dist"] = ""
+        d["volx"] = ""
     d["spark"] = r.get("spark", [])
     return d
 

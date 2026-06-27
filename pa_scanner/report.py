@@ -30,10 +30,14 @@ def _enrich(rows):
             d["detail"] = r.get("pattern", "")
             d["dist"] = r.get("dist_atr", "")
             d["volx"] = ""
-        else:
+        elif r["signal"] == "S2":
             d["detail"] = f"pullback {r.get('pullback_pct', '')}%"
             d["dist"] = r.get("breakout_atr", "")
             d["volx"] = r.get("volx", "")
+        else:  # S3 range / chop
+            d["detail"] = r.get("label", "")
+            d["dist"] = ""
+            d["volx"] = ""
         d["spark_svg"] = _sparkline(r.get("spark", []), r.get("side"))
         d.pop("spark", None)
         out.append(d)
@@ -91,8 +95,10 @@ _TEMPLATE = """<!doctype html>
   <button data-f="all" class="on">All</button>
   <button data-f="S1">S1 reversal</button>
   <button data-f="S2">S2 breakout</button>
+  <button data-f="S3">S3 chop</button>
   <button data-f="long">Long</button>
   <button data-f="short">Short</button>
+  <button data-f="neutral">Neutral</button>
   <span class="spacer"></span>
   <button id="csv">Export CSV</button>
 </div>
@@ -143,7 +149,7 @@ function structCell(r){
 function passes(r){
   if(q && !r.ticker.toLowerCase().includes(q)) return false;
   if(filt==="all") return true;
-  if(filt==="S1"||filt==="S2") return r.signal===filt;
+  if(filt==="S1"||filt==="S2"||filt==="S3") return r.signal===filt;
   return r.side===filt;
 }
 function render(){

@@ -43,6 +43,7 @@ def main():
                     help="prefer the TWS vol provider (stub for now; falls back to approx)")
     ap.add_argument("--long-only", action="store_true")
     ap.add_argument("--short-only", action="store_true")
+    ap.add_argument("--no-neutral", action="store_true", help="disable S3 range/chop signals")
     ap.add_argument("--limit", type=int, default=None, help="cap universe size (debug)")
     ap.add_argument("--tickers", nargs="*", help="scan only these tickers")
     a = ap.parse_args()
@@ -51,6 +52,8 @@ def main():
         CFG.allow_short = False
     if a.short_only:
         CFG.allow_long = False
+    if a.no_neutral:
+        CFG.allow_neutral = False
     if a.tws:
         CFG.vol_source = "tws"
 

@@ -53,8 +53,10 @@
   <button data-f="all" class="on">All</button>
   <button data-f="S1">S1 reversal</button>
   <button data-f="S2">S2 breakout</button>
+  <button data-f="S3">S3 chop</button>
   <button data-f="long">Long</button>
   <button data-f="short">Short</button>
+  <button data-f="neutral">Neutral</button>
   <span class="spacer"></span>
   <button id="reload">↻ Reload</button>
   <button id="csv">Export CSV</button>
@@ -117,7 +119,7 @@ function structCell(r){
 function passes(r){
   if(q && !r.ticker.toLowerCase().includes(q)) return false;
   if(filt==="all") return true;
-  if(filt==="S1"||filt==="S2") return r.signal===filt;
+  if(filt==="S1"||filt==="S2"||filt==="S3") return r.signal===filt;
   return r.side===filt;
 }
 function render(){
