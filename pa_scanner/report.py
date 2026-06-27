@@ -74,6 +74,9 @@ _TEMPLATE = """<!doctype html>
  .tag{padding:1px 7px;border-radius:4px;font-size:11px;font-weight:600}
  .s1{background:#1f6feb33;color:#79c0ff} .s2{background:#a371f733;color:#d2a8ff}
  .long{color:var(--grn)} .short{color:var(--red)}
+ .bullish{color:var(--grn)} .bearish{color:var(--red)} .neutral{color:var(--mut)}
+ .src{color:var(--mut);font-size:10px;text-transform:uppercase}
+ .dc-D{color:#79c0ff} .dc-C{color:#d2a8ff}
  .score{font-weight:600}
  a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
  .empty{padding:40px 20px;color:var(--mut)}
@@ -104,6 +107,9 @@ _TEMPLATE = """<!doctype html>
   <th data-k="detail">Detail</th>
   <th data-k="volx" class="num">Vol&times;</th>
   <th data-k="atr" class="num">ATR</th>
+  <th data-k="regime">Regime</th>
+  <th data-k="vol_state">Vol</th>
+  <th data-k="structure">Structure</th>
   <th>Trend</th>
   <th>Chart</th>
 </tr></thead><tbody id="b"></tbody></table>
@@ -112,6 +118,26 @@ _TEMPLATE = """<!doctype html>
 const ROWS = __ROWS__;
 let view = ROWS.slice(), sortK = "score", sortDir = -1, filt = "all", q = "";
 const $ = s => document.querySelector(s);
+const REG={bullish:'Bull',bearish:'Bear',neutral:'Neut'};
+function regCell(r){
+  if(!r.regime) return "";
+  return `<span class="${r.regime}">${REG[r.regime]||r.regime}</span> <span class="src">ADX ${r.regime_adx??''}</span>`;
+}
+function volTitle(r){
+  const f=[];
+  if(r.ivr!=null) f.push("IVR "+r.ivr);
+  if(r.iv!=null) f.push("IV "+r.iv);
+  if(r.rv!=null) f.push("RV "+r.rv);
+  if(r.vrp!=null) f.push("VRP "+(r.vrp>0?"+":"")+r.vrp);
+  if(r.term!=null) f.push("term "+(r.term>0?"+":"")+r.term);
+  return f.join(" \u00b7 ") || "no IV data";
+}
+function volCell(r){ if(!r.vol_state) return ""; return `${r.vol_state} <span class="src">${r.vol_src||''}</span>`; }
+function structCell(r){
+  if(!r.structure) return "";
+  const m=String(r.structure).match(/\\((\\w)\\)$/), dc=m?m[1]:'';
+  return `<span class="dc-${dc}">${r.structure}</span>`;
+}
 function passes(r){
   if(q && !r.ticker.toLowerCase().includes(q)) return false;
   if(filt==="all") return true;
@@ -138,6 +164,9 @@ function render(){
       `<td>${r.detail??""}</td>`+
       `<td class="num">${r.volx??""}</td>`+
       `<td class="num">${r.atr}</td>`+
+      `<td>${regCell(r)}</td>`+
+      `<td title="${volTitle(r)}">${volCell(r)}</td>`+
+      `<td>${structCell(r)}</td>`+
       `<td>${r.spark_svg}</td>`+
       `<td><a href="https://www.tradingview.com/chart/?symbol=${encodeURIComponent(r.ticker)}" target="_blank">TV</a></td>`;
     tb.appendChild(tr);
@@ -156,7 +185,9 @@ document.querySelectorAll(".bar button[data-f]").forEach(btn=>btn.onclick=()=>{
 });
 $("#q").oninput=e=>{q=e.target.value.trim().toLowerCase(); render();};
 $("#csv").onclick=()=>{
-  const cols=["ticker","signal","side","score","last","level","dist","detail","volx","atr","label"];
+  const cols=["ticker","signal","side","score","last","level","dist","detail","volx","atr",
+              "regime","regime_adx","vol_state","vol_src","cell","structure",
+              "ivr","iv","rv","vrp","term","label"];
   const head=cols.join(",");
   const lines=view.map(r=>cols.map(c=>{
     let v=r[c]; if(v==null) v=""; v=String(v).replace(/"/g,'""');

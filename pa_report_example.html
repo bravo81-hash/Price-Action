@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Price-Action Scan 2026-06-26 23:53</title>
+<title>Price-Action Scan 2026-06-27 01:50</title>
 <style>
  :root{--bg:#0d1117;--panel:#161b22;--bd:#30363d;--fg:#e6edf3;--mut:#8b949e;
    --grn:#3fb950;--red:#f85149;--accent:#58a6ff}
@@ -32,14 +32,17 @@
  .tag{padding:1px 7px;border-radius:4px;font-size:11px;font-weight:600}
  .s1{background:#1f6feb33;color:#79c0ff} .s2{background:#a371f733;color:#d2a8ff}
  .long{color:var(--grn)} .short{color:var(--red)}
+ .bullish{color:var(--grn)} .bearish{color:var(--red)} .neutral{color:var(--mut)}
+ .src{color:var(--mut);font-size:10px;text-transform:uppercase}
+ .dc-D{color:#79c0ff} .dc-C{color:#d2a8ff}
  .score{font-weight:600}
  a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
  .empty{padding:40px 20px;color:var(--mut)}
 </style></head><body>
 <header>
   <h1>PRICE-ACTION SCAN</h1>
-  <span class="meta">2026-06-26 23:53</span>
-  <span class="meta">universe 183 &middot; liquid 5 &middot; signals 5</span>
+  <span class="meta">2026-06-27 01:50</span>
+  <span class="meta">universe 600 &middot; liquid 8 &middot; signals 8</span>
 </header>
 <div class="bar">
   <input id="q" placeholder="filter ticker...">
@@ -62,14 +65,37 @@
   <th data-k="detail">Detail</th>
   <th data-k="volx" class="num">Vol&times;</th>
   <th data-k="atr" class="num">ATR</th>
+  <th data-k="regime">Regime</th>
+  <th data-k="vol_state">Vol</th>
+  <th data-k="structure">Structure</th>
   <th>Trend</th>
   <th>Chart</th>
 </tr></thead><tbody id="b"></tbody></table>
 <div id="empty" class="empty" style="display:none">No signals matched.</div>
 <script>
-const ROWS = [{"ticker": "NVDA", "signal": "S2", "signal_name": "Trend pullback breakout", "side": "long", "score": 1.0, "last": 151.9, "label": "pullback breakout (wk uptrend)", "atr": 1.83, "level": 149.9, "breakout_atr": 1.09, "volx": 1.9, "pullback_pct": 6.3, "detail": "pullback 6.3%", "dist": 1.09, "spark_svg": "<svg width='110' height='28' viewBox='0 0 110 28'><polyline fill='none' stroke='#3fb950' stroke-width='1.4' points='2.0,26.0 4.7,25.5 7.4,25.0 10.2,24.5 12.9,24.0 15.6,23.5 18.3,23.0 21.0,22.5 23.7,22.0 26.5,21.5 29.2,21.0 31.9,20.5 34.6,19.9 37.3,19.4 40.1,18.9 42.8,18.4 45.5,17.9 48.2,17.4 50.9,16.9 53.6,16.4 56.4,15.9 59.1,15.4 61.8,14.9 64.5,14.4 67.2,13.9 69.9,13.4 72.7,12.9 75.4,12.4 78.1,19.9 80.8,19.4 83.5,18.9 86.3,18.4 89.0,17.9 91.7,17.4 94.4,16.9 97.1,16.4 99.8,15.9 102.6,15.4 105.3,6.8 108.0,2.0'/></svg>"}, {"ticker": "AAPL", "signal": "S2", "signal_name": "Trend pullback breakout", "side": "long", "score": 1.0, "last": 151.9, "label": "pullback breakout (wk uptrend)", "atr": 1.83, "level": 149.9, "breakout_atr": 1.09, "volx": 1.9, "pullback_pct": 6.3, "detail": "pullback 6.3%", "dist": 1.09, "spark_svg": "<svg width='110' height='28' viewBox='0 0 110 28'><polyline fill='none' stroke='#3fb950' stroke-width='1.4' points='2.0,26.0 4.7,25.5 7.4,25.0 10.2,24.5 12.9,24.0 15.6,23.5 18.3,23.0 21.0,22.5 23.7,22.0 26.5,21.5 29.2,21.0 31.9,20.5 34.6,19.9 37.3,19.4 40.1,18.9 42.8,18.4 45.5,17.9 48.2,17.4 50.9,16.9 53.6,16.4 56.4,15.9 59.1,15.4 61.8,14.9 64.5,14.4 67.2,13.9 69.9,13.4 72.7,12.9 75.4,12.4 78.1,19.9 80.8,19.4 83.5,18.9 86.3,18.4 89.0,17.9 91.7,17.4 94.4,16.9 97.1,16.4 99.8,15.9 102.6,15.4 105.3,6.8 108.0,2.0'/></svg>"}, {"ticker": "XLE", "signal": "S2", "signal_name": "Trend pullback breakout", "side": "short", "score": 1.0, "last": 47.85, "label": "breakdown (wk downtrend)", "atr": 1.83, "level": 49.85, "breakout_atr": 1.09, "volx": 1.9, "pullback_pct": 20.4, "detail": "pullback 20.4%", "dist": 1.09, "spark_svg": "<svg width='110' height='28' viewBox='0 0 110 28'><polyline fill='none' stroke='#f85149' stroke-width='1.4' points='2.0,2.0 4.7,2.5 7.4,3.0 10.2,3.5 12.9,4.0 15.6,4.5 18.3,5.0 21.0,5.5 23.7,6.0 26.5,6.5 29.2,7.0 31.9,7.5 34.6,8.1 37.3,8.6 40.1,9.1 42.8,9.6 45.5,10.1 48.2,10.6 50.9,11.1 53.6,11.6 56.4,12.1 59.1,12.6 61.8,13.1 64.5,13.6 67.2,14.1 69.9,14.6 72.7,15.1 75.4,15.6 78.1,8.1 80.8,8.6 83.5,9.1 86.3,9.6 89.0,10.1 91.7,10.6 94.4,11.1 97.1,11.6 99.8,12.1 102.6,12.6 105.3,21.2 108.0,26.0'/></svg>"}, {"ticker": "MSFT", "signal": "S2", "signal_name": "Trend pullback breakout", "side": "long", "score": 1.0, "last": 151.9, "label": "pullback breakout (wk uptrend)", "atr": 1.83, "level": 149.9, "breakout_atr": 1.09, "volx": 1.9, "pullback_pct": 6.3, "detail": "pullback 6.3%", "dist": 1.09, "spark_svg": "<svg width='110' height='28' viewBox='0 0 110 28'><polyline fill='none' stroke='#3fb950' stroke-width='1.4' points='2.0,26.0 4.7,25.5 7.4,25.0 10.2,24.5 12.9,24.0 15.6,23.5 18.3,23.0 21.0,22.5 23.7,22.0 26.5,21.5 29.2,21.0 31.9,20.5 34.6,19.9 37.3,19.4 40.1,18.9 42.8,18.4 45.5,17.9 48.2,17.4 50.9,16.9 53.6,16.4 56.4,15.9 59.1,15.4 61.8,14.9 64.5,14.4 67.2,13.9 69.9,13.4 72.7,12.9 75.4,12.4 78.1,19.9 80.8,19.4 83.5,18.9 86.3,18.4 89.0,17.9 91.7,17.4 94.4,16.9 97.1,16.4 99.8,15.9 102.6,15.4 105.3,6.8 108.0,2.0'/></svg>"}, {"ticker": "GDX", "signal": "S2", "signal_name": "Trend pullback breakout", "side": "short", "score": 1.0, "last": 47.85, "label": "breakdown (wk downtrend)", "atr": 1.83, "level": 49.85, "breakout_atr": 1.09, "volx": 1.9, "pullback_pct": 20.4, "detail": "pullback 20.4%", "dist": 1.09, "spark_svg": "<svg width='110' height='28' viewBox='0 0 110 28'><polyline fill='none' stroke='#f85149' stroke-width='1.4' points='2.0,2.0 4.7,2.5 7.4,3.0 10.2,3.5 12.9,4.0 15.6,4.5 18.3,5.0 21.0,5.5 23.7,6.0 26.5,6.5 29.2,7.0 31.9,7.5 34.6,8.1 37.3,8.6 40.1,9.1 42.8,9.6 45.5,10.1 48.2,10.6 50.9,11.1 53.6,11.6 56.4,12.1 59.1,12.6 61.8,13.1 64.5,13.6 67.2,14.1 69.9,14.6 72.7,15.1 75.4,15.6 78.1,8.1 80.8,8.6 83.5,9.1 86.3,9.6 89.0,10.1 91.7,10.6 94.4,11.1 97.1,11.6 99.8,12.1 102.6,12.6 105.3,21.2 108.0,26.0'/></svg>"}];
+const ROWS = [{"ticker": "NVDA", "signal": "S2", "signal_name": "Trend pullback breakout", "side": "long", "score": 1.0, "last": 151.9, "label": "pullback breakout (wk uptrend)", "atr": 1.83, "level": 149.9, "breakout_atr": 1.09, "volx": 1.9, "pullback_pct": 6.3, "regime": "bullish", "regime_adx": 56.0, "vol_state": "rich", "vol_src": "rvr", "cell": "BullxRich", "structure": "Put Credit Spread (C)", "ivr": null, "iv": null, "rv": 15.0, "vrp": null, "term": null, "detail": "pullback 6.3%", "dist": 1.09, "spark_svg": "<svg width='110' height='28' viewBox='0 0 110 28'><polyline fill='none' stroke='#3fb950' stroke-width='1.4' points='2.0,26.0 4.7,25.5 7.4,25.0 10.2,24.5 12.9,24.0 15.6,23.5 18.3,23.0 21.0,22.5 23.7,22.0 26.5,21.5 29.2,21.0 31.9,20.5 34.6,19.9 37.3,19.4 40.1,18.9 42.8,18.4 45.5,17.9 48.2,17.4 50.9,16.9 53.6,16.4 56.4,15.9 59.1,15.4 61.8,14.9 64.5,14.4 67.2,13.9 69.9,13.4 72.7,12.9 75.4,12.4 78.1,19.9 80.8,19.4 83.5,18.9 86.3,18.4 89.0,17.9 91.7,17.4 94.4,16.9 97.1,16.4 99.8,15.9 102.6,15.4 105.3,6.8 108.0,2.0'/></svg>"}, {"ticker": "AAPL", "signal": "S2", "signal_name": "Trend pullback breakout", "side": "long", "score": 1.0, "last": 151.9, "label": "pullback breakout (wk uptrend)", "atr": 1.83, "level": 149.9, "breakout_atr": 1.09, "volx": 1.9, "pullback_pct": 6.3, "regime": "bullish", "regime_adx": 56.0, "vol_state": "rich", "vol_src": "rvr", "cell": "BullxRich", "structure": "Put Credit Spread (C)", "ivr": null, "iv": null, "rv": 15.0, "vrp": null, "term": null, "detail": "pullback 6.3%", "dist": 1.09, "spark_svg": "<svg width='110' height='28' viewBox='0 0 110 28'><polyline fill='none' stroke='#3fb950' stroke-width='1.4' points='2.0,26.0 4.7,25.5 7.4,25.0 10.2,24.5 12.9,24.0 15.6,23.5 18.3,23.0 21.0,22.5 23.7,22.0 26.5,21.5 29.2,21.0 31.9,20.5 34.6,19.9 37.3,19.4 40.1,18.9 42.8,18.4 45.5,17.9 48.2,17.4 50.9,16.9 53.6,16.4 56.4,15.9 59.1,15.4 61.8,14.9 64.5,14.4 67.2,13.9 69.9,13.4 72.7,12.9 75.4,12.4 78.1,19.9 80.8,19.4 83.5,18.9 86.3,18.4 89.0,17.9 91.7,17.4 94.4,16.9 97.1,16.4 99.8,15.9 102.6,15.4 105.3,6.8 108.0,2.0'/></svg>"}, {"ticker": "XLE", "signal": "S2", "signal_name": "Trend pullback breakout", "side": "short", "score": 1.0, "last": 47.85, "label": "breakdown (wk downtrend)", "atr": 1.83, "level": 49.85, "breakout_atr": 1.09, "volx": 1.9, "pullback_pct": 20.4, "regime": "bearish", "regime_adx": 56.0, "vol_state": "rich", "vol_src": "rvr", "cell": "BearxRich", "structure": "Call Credit Spread (C)", "ivr": null, "iv": null, "rv": 41.6, "vrp": null, "term": null, "detail": "pullback 20.4%", "dist": 1.09, "spark_svg": "<svg width='110' height='28' viewBox='0 0 110 28'><polyline fill='none' stroke='#f85149' stroke-width='1.4' points='2.0,2.0 4.7,2.5 7.4,3.0 10.2,3.5 12.9,4.0 15.6,4.5 18.3,5.0 21.0,5.5 23.7,6.0 26.5,6.5 29.2,7.0 31.9,7.5 34.6,8.1 37.3,8.6 40.1,9.1 42.8,9.6 45.5,10.1 48.2,10.6 50.9,11.1 53.6,11.6 56.4,12.1 59.1,12.6 61.8,13.1 64.5,13.6 67.2,14.1 69.9,14.6 72.7,15.1 75.4,15.6 78.1,8.1 80.8,8.6 83.5,9.1 86.3,9.6 89.0,10.1 91.7,10.6 94.4,11.1 97.1,11.6 99.8,12.1 102.6,12.6 105.3,21.2 108.0,26.0'/></svg>"}, {"ticker": "MSFT", "signal": "S2", "signal_name": "Trend pullback breakout", "side": "long", "score": 1.0, "last": 151.9, "label": "pullback breakout (wk uptrend)", "atr": 1.83, "level": 149.9, "breakout_atr": 1.09, "volx": 1.9, "pullback_pct": 6.3, "regime": "bullish", "regime_adx": 56.0, "vol_state": "rich", "vol_src": "rvr", "cell": "BullxRich", "structure": "Put Credit Spread (C)", "ivr": null, "iv": null, "rv": 15.0, "vrp": null, "term": null, "detail": "pullback 6.3%", "dist": 1.09, "spark_svg": "<svg width='110' height='28' viewBox='0 0 110 28'><polyline fill='none' stroke='#3fb950' stroke-width='1.4' points='2.0,26.0 4.7,25.5 7.4,25.0 10.2,24.5 12.9,24.0 15.6,23.5 18.3,23.0 21.0,22.5 23.7,22.0 26.5,21.5 29.2,21.0 31.9,20.5 34.6,19.9 37.3,19.4 40.1,18.9 42.8,18.4 45.5,17.9 48.2,17.4 50.9,16.9 53.6,16.4 56.4,15.9 59.1,15.4 61.8,14.9 64.5,14.4 67.2,13.9 69.9,13.4 72.7,12.9 75.4,12.4 78.1,19.9 80.8,19.4 83.5,18.9 86.3,18.4 89.0,17.9 91.7,17.4 94.4,16.9 97.1,16.4 99.8,15.9 102.6,15.4 105.3,6.8 108.0,2.0'/></svg>"}, {"ticker": "GDX", "signal": "S2", "signal_name": "Trend pullback breakout", "side": "short", "score": 1.0, "last": 47.85, "label": "breakdown (wk downtrend)", "atr": 1.83, "level": 49.85, "breakout_atr": 1.09, "volx": 1.9, "pullback_pct": 20.4, "regime": "bearish", "regime_adx": 56.0, "vol_state": "rich", "vol_src": "rvr", "cell": "BearxRich", "structure": "Call Credit Spread (C)", "ivr": null, "iv": null, "rv": 41.6, "vrp": null, "term": null, "detail": "pullback 20.4%", "dist": 1.09, "spark_svg": "<svg width='110' height='28' viewBox='0 0 110 28'><polyline fill='none' stroke='#f85149' stroke-width='1.4' points='2.0,2.0 4.7,2.5 7.4,3.0 10.2,3.5 12.9,4.0 15.6,4.5 18.3,5.0 21.0,5.5 23.7,6.0 26.5,6.5 29.2,7.0 31.9,7.5 34.6,8.1 37.3,8.6 40.1,9.1 42.8,9.6 45.5,10.1 48.2,10.6 50.9,11.1 53.6,11.6 56.4,12.1 59.1,12.6 61.8,13.1 64.5,13.6 67.2,14.1 69.9,14.6 72.7,15.1 75.4,15.6 78.1,8.1 80.8,8.6 83.5,9.1 86.3,9.6 89.0,10.1 91.7,10.6 94.4,11.1 97.1,11.6 99.8,12.1 102.6,12.6 105.3,21.2 108.0,26.0'/></svg>"}, {"ticker": "IWM", "signal": "S2", "signal_name": "Trend pullback breakout", "side": "long", "score": 1.0, "last": 151.9, "label": "pullback breakout (wk uptrend)", "atr": 1.83, "level": 149.9, "breakout_atr": 1.09, "volx": 1.9, "pullback_pct": 6.3, "regime": "bullish", "regime_adx": 56.0, "vol_state": "rich", "vol_src": "rvr", "cell": "BullxRich", "structure": "Put Credit Spread (C)", "ivr": null, "iv": null, "rv": 15.0, "vrp": null, "term": null, "detail": "pullback 6.3%", "dist": 1.09, "spark_svg": "<svg width='110' height='28' viewBox='0 0 110 28'><polyline fill='none' stroke='#3fb950' stroke-width='1.4' points='2.0,26.0 4.7,25.5 7.4,25.0 10.2,24.5 12.9,24.0 15.6,23.5 18.3,23.0 21.0,22.5 23.7,22.0 26.5,21.5 29.2,21.0 31.9,20.5 34.6,19.9 37.3,19.4 40.1,18.9 42.8,18.4 45.5,17.9 48.2,17.4 50.9,16.9 53.6,16.4 56.4,15.9 59.1,15.4 61.8,14.9 64.5,14.4 67.2,13.9 69.9,13.4 72.7,12.9 75.4,12.4 78.1,19.9 80.8,19.4 83.5,18.9 86.3,18.4 89.0,17.9 91.7,17.4 94.4,16.9 97.1,16.4 99.8,15.9 102.6,15.4 105.3,6.8 108.0,2.0'/></svg>"}, {"ticker": "XOP", "signal": "S2", "signal_name": "Trend pullback breakout", "side": "short", "score": 1.0, "last": 47.85, "label": "breakdown (wk downtrend)", "atr": 1.83, "level": 49.85, "breakout_atr": 1.09, "volx": 1.9, "pullback_pct": 20.4, "regime": "bearish", "regime_adx": 56.0, "vol_state": "rich", "vol_src": "rvr", "cell": "BearxRich", "structure": "Call Credit Spread (C)", "ivr": null, "iv": null, "rv": 41.6, "vrp": null, "term": null, "detail": "pullback 20.4%", "dist": 1.09, "spark_svg": "<svg width='110' height='28' viewBox='0 0 110 28'><polyline fill='none' stroke='#f85149' stroke-width='1.4' points='2.0,2.0 4.7,2.5 7.4,3.0 10.2,3.5 12.9,4.0 15.6,4.5 18.3,5.0 21.0,5.5 23.7,6.0 26.5,6.5 29.2,7.0 31.9,7.5 34.6,8.1 37.3,8.6 40.1,9.1 42.8,9.6 45.5,10.1 48.2,10.6 50.9,11.1 53.6,11.6 56.4,12.1 59.1,12.6 61.8,13.1 64.5,13.6 67.2,14.1 69.9,14.6 72.7,15.1 75.4,15.6 78.1,8.1 80.8,8.6 83.5,9.1 86.3,9.6 89.0,10.1 91.7,10.6 94.4,11.1 97.1,11.6 99.8,12.1 102.6,12.6 105.3,21.2 108.0,26.0'/></svg>"}, {"ticker": "SMH", "signal": "S2", "signal_name": "Trend pullback breakout", "side": "long", "score": 1.0, "last": 151.9, "label": "pullback breakout (wk uptrend)", "atr": 1.83, "level": 149.9, "breakout_atr": 1.09, "volx": 1.9, "pullback_pct": 6.3, "regime": "bullish", "regime_adx": 56.0, "vol_state": "rich", "vol_src": "rvr", "cell": "BullxRich", "structure": "Put Credit Spread (C)", "ivr": null, "iv": null, "rv": 15.0, "vrp": null, "term": null, "detail": "pullback 6.3%", "dist": 1.09, "spark_svg": "<svg width='110' height='28' viewBox='0 0 110 28'><polyline fill='none' stroke='#3fb950' stroke-width='1.4' points='2.0,26.0 4.7,25.5 7.4,25.0 10.2,24.5 12.9,24.0 15.6,23.5 18.3,23.0 21.0,22.5 23.7,22.0 26.5,21.5 29.2,21.0 31.9,20.5 34.6,19.9 37.3,19.4 40.1,18.9 42.8,18.4 45.5,17.9 48.2,17.4 50.9,16.9 53.6,16.4 56.4,15.9 59.1,15.4 61.8,14.9 64.5,14.4 67.2,13.9 69.9,13.4 72.7,12.9 75.4,12.4 78.1,19.9 80.8,19.4 83.5,18.9 86.3,18.4 89.0,17.9 91.7,17.4 94.4,16.9 97.1,16.4 99.8,15.9 102.6,15.4 105.3,6.8 108.0,2.0'/></svg>"}];
 let view = ROWS.slice(), sortK = "score", sortDir = -1, filt = "all", q = "";
 const $ = s => document.querySelector(s);
+const REG={bullish:'Bull',bearish:'Bear',neutral:'Neut'};
+function regCell(r){
+  if(!r.regime) return "";
+  return `<span class="${r.regime}">${REG[r.regime]||r.regime}</span> <span class="src">ADX ${r.regime_adx??''}</span>`;
+}
+function volTitle(r){
+  const f=[];
+  if(r.ivr!=null) f.push("IVR "+r.ivr);
+  if(r.iv!=null) f.push("IV "+r.iv);
+  if(r.rv!=null) f.push("RV "+r.rv);
+  if(r.vrp!=null) f.push("VRP "+(r.vrp>0?"+":"")+r.vrp);
+  if(r.term!=null) f.push("term "+(r.term>0?"+":"")+r.term);
+  return f.join(" · ") || "no IV data";
+}
+function volCell(r){ if(!r.vol_state) return ""; return `${r.vol_state} <span class="src">${r.vol_src||''}</span>`; }
+function structCell(r){
+  if(!r.structure) return "";
+  const m=String(r.structure).match(/\((\w)\)$/), dc=m?m[1]:'';
+  return `<span class="dc-${dc}">${r.structure}</span>`;
+}
 function passes(r){
   if(q && !r.ticker.toLowerCase().includes(q)) return false;
   if(filt==="all") return true;
@@ -96,6 +122,9 @@ function render(){
       `<td>${r.detail??""}</td>`+
       `<td class="num">${r.volx??""}</td>`+
       `<td class="num">${r.atr}</td>`+
+      `<td>${regCell(r)}</td>`+
+      `<td title="${volTitle(r)}">${volCell(r)}</td>`+
+      `<td>${structCell(r)}</td>`+
       `<td>${r.spark_svg}</td>`+
       `<td><a href="https://www.tradingview.com/chart/?symbol=${encodeURIComponent(r.ticker)}" target="_blank">TV</a></td>`;
     tb.appendChild(tr);
@@ -114,7 +143,9 @@ document.querySelectorAll(".bar button[data-f]").forEach(btn=>btn.onclick=()=>{
 });
 $("#q").oninput=e=>{q=e.target.value.trim().toLowerCase(); render();};
 $("#csv").onclick=()=>{
-  const cols=["ticker","signal","side","score","last","level","dist","detail","volx","atr","label"];
+  const cols=["ticker","signal","side","score","last","level","dist","detail","volx","atr",
+              "regime","regime_adx","vol_state","vol_src","cell","structure",
+              "ivr","iv","rv","vrp","term","label"];
   const head=cols.join(",");
   const lines=view.map(r=>cols.map(c=>{
     let v=r[c]; if(v==null) v=""; v=String(v).replace(/"/g,'""');
@@ -123,7 +154,7 @@ $("#csv").onclick=()=>{
   const blob=new Blob([head+"\n"+lines.join("\n")],{type:"text/csv"});
   const a=document.createElement("a");
   a.href=URL.createObjectURL(blob);
-  a.download="pa_scan_"+"20260626_2353"+".csv"; a.click();
+  a.download="pa_scan_"+"20260627_0150"+".csv"; a.click();
 };
 render();
 </script></body></html>

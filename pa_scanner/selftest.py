@@ -12,8 +12,9 @@ from .config import CFG
 from . import candles as cnd
 from . import indicators as ind
 from . import data as dl
-from .scanner import prepare_context, SymbolContext
+from .scanner import prepare_context, SymbolContext, add_regime
 from .rules import ReversalAtWeeklyLevel, TrendPullbackBreakout
+from .regime import VolInputs, direction_read, vol_read, strategy
 from .report import write_report
 
 PASS, FAIL = [], []
@@ -156,6 +157,46 @@ def main():
     check("report file written", len(txt) > 1000)
     check("report contains tickers", "AAPL" in txt and "XLE" in txt)
     check("report contains sparkline svg", "<svg" in txt)
+
+    print("regime: direction read (unit)")
+    check("uptrend -> bullish", direction_read(make_s2("long"))[0] == "bullish")
+    check("downtrend -> bearish", direction_read(make_s2("short"))[0] == "bearish")
+    import numpy as _np
+    flat_c = 100 + 0.05 * ((-1.0) ** _np.arange(400))     # 2-bar zigzag, ~0 ADX
+    flat = pd.DataFrame({"open": flat_c, "high": flat_c + 0.3, "low": flat_c - 0.3,
+                         "close": flat_c, "volume": [1e6] * 400},
+                        index=pd.bdate_range(start="2023-01-02", periods=400))
+    dflat, mflat = direction_read(flat)
+    check("choppy/low-ADX -> neutral", dflat == "neutral")
+
+    print("regime: vol-state read (unit)")
+    check("low IVR -> cheap", vol_read(VolInputs(ivr=15))[0] == "cheap")
+    check("high IVR -> rich", vol_read(VolInputs(ivr=75))[0] == "rich")
+    check("mid IVR -> fair", vol_read(VolInputs(ivr=45))[0] == "fair")
+    check("RV-rank seed when no IVR", vol_read(VolInputs(rv_rank=80))[0] == "rich")
+    check("VRP<=0 nudges cheaper", vol_read(VolInputs(ivr=75, vrp=-0.02))[0] == "fair")
+    check("backwardation forces cheap", vol_read(VolInputs(ivr=75, backwardation=True))[0] == "cheap")
+    check("no vol data -> fair", vol_read(VolInputs())[0] == "fair")
+
+    print("regime: strategy matrix (unit)")
+    check("bullish+rich -> Put Credit Spread (C)", strategy("bullish", "rich")[1:] == ("Put Credit Spread", "C"))
+    check("neutral+fair -> Iron Condor (C)", strategy("neutral", "fair")[1:] == ("Iron Condor", "C"))
+    check("bearish+cheap -> Long Put (D)", strategy("bearish", "cheap")[1:] == ("Long Put", "D"))
+    check("bullish+cheap -> Call Debit Spread (D)", strategy("bullish", "cheap")[1:] == ("Call Debit Spread", "D"))
+    check("matrix covers all 9 cells", len({(d, v) for d in ("bearish", "neutral", "bullish")
+                                            for v in ("cheap", "fair", "rich")}) == 9)
+
+    print("regime: annotate pipeline (end-to-end, no IV)")
+    bundle = {"NVDA": (make_s2("long"), dl.to_weekly(make_s2("long"))),
+              "XLE": (make_s2("short"), dl.to_weekly(make_s2("short")))}
+    erows = [{"ticker": "NVDA", "signal": "S2", "side": "long", "score": 0.8,
+              "last": 100, "atr": 2, "spark": [1, 2]},
+             {"ticker": "XLE", "signal": "S2", "side": "short", "score": 0.7,
+              "last": 50, "atr": 1, "spark": [1, 2]}]
+    add_regime(erows, bundle, iv_enrich=False, vix_backwardation=None)
+    check("regime attached", all("regime" in r and "vol_state" in r for r in erows))
+    check("structure attached", all(r.get("structure") for r in erows))
+    check("NVDA regime bullish", erows[0]["regime"] == "bullish")
 
     print(f"\n{len(PASS)} passed, {len(FAIL)} failed")
     if FAIL:

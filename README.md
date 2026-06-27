@@ -152,3 +152,50 @@ The dashboard picks up the new snapshot on reload. Past snapshots are kept (last
 `pa_report.html` (from a plain `python -m pa_scanner.cli`) is a single
 self-contained file with the data baked in. Drop it in OneDrive/Drive and open it
 in any browser — no hosting, stays private.
+
+## Regime context per ticker (direction × vol-state → structure)
+
+Every signal row is annotated with a trade-construction read, so pre-market /
+post-market prep on any machine shows not just *what* fired but *how to express
+it*:
+
+- **Regime** — direction from trend/ADX/bias: **Bull / Bear / Neut** (Neutral
+  when ADX < `adx_trend_min`, i.e. no directional conviction). Price-only, so it
+  is identical in every environment.
+- **Vol** — **cheap / fair / rich**, via the playbook's 3-step logic:
+  1. bucket from **IVR** (or realized-vol rank as the free-path seed),
+  2. **VRP ≤ 0** nudges one bucket cheaper,
+  3. **backwardation** forces cheap.
+  The small tag shows the seed used: `ivr` (true IV rank, TWS path) or `rvr`
+  (realized-vol rank, free path). Hover the cell for IV / RV / VRP / term.
+- **Structure** — the regime cell mapped through the 3×3 matrix, with the
+  debit/credit tag:
+
+  |        | cheap | fair | rich |
+  |--------|-------|------|------|
+  | **Bear** | Long Put (D) | Call Credit Spread (C) | Call Credit Spread (C) |
+  | **Neut** | Calendar (D) | Iron Condor (C) | Iron Condor (C) |
+  | **Bull** | Call Debit Spread (D) | Put Credit Spread (C) | Put Credit Spread (C) |
+
+  Structure follows the **regime** direction (the backdrop), which can differ
+  from a given signal's side — both are shown so the context is explicit.
+
+### Two accuracy tiers (same matrix, different vol source)
+- **Free path (cloud / work-computer prep):** no IV history, so IVR isn't
+  available. For each *signal hit* the scanner pulls **current ATM IV** from
+  yfinance option chains → real **VRP** (IV vs realized vol) + per-ticker **term
+  slope**; vol-state is seeded from realized-vol rank. Clearly tagged `rvr`.
+  `--no-iv` skips the option fetch entirely (realized-vol only, fastest).
+- **Personal PC + TWS (later):** `pa_scanner/volproviders.py` has a
+  `TWSVolProvider` stub with the full ib_async implementation outline (IBKR
+  `OPTION_IMPLIED_VOLATILITY` history for true **IVR**, chain for term
+  structure). Fill it in, then run with `--tws` for the accurate read. Until
+  then `--tws` prints a note and falls back to the approximation.
+
+All thresholds (IVR/RV-rank buckets, ADX trend floor, VRP/backwardation rules,
+target DTEs for the IV pull) live in `config.py`.
+
+> Note: live IV fetching (yfinance option chains and TWS) can't run in the build
+> sandbox, so the regime **logic, matrix, and rendering are verified by
+> self-tests** (37 checks), while the IV fetch is structure-verified — it runs on
+> your machine / the cloud runner.

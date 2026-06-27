@@ -56,3 +56,37 @@ def cluster(levels, tol: float):
             grp = [x]
     zones.append((float(np.mean(grp)), len(grp)))
     return zones
+
+
+def adx(df: pd.DataFrame, n: int | None = None):
+    """Wilder ADX with +DI/-DI. Returns (adx, plus_di, minus_di) Series."""
+    n = n or CFG.adx_window
+    h, l, c = df["high"], df["low"], df["close"]
+    up = h.diff()
+    dn = -l.diff()
+    plus_dm = up.where((up > dn) & (up > 0), 0.0)
+    minus_dm = dn.where((dn > up) & (dn > 0), 0.0)
+    pc = c.shift(1)
+    tr = pd.concat([(h - l), (h - pc).abs(), (l - pc).abs()], axis=1).max(axis=1)
+    a = 1.0 / n  # Wilder smoothing
+    atr_n = tr.ewm(alpha=a, adjust=False).mean()
+    plus_di = 100 * plus_dm.ewm(alpha=a, adjust=False).mean() / atr_n
+    minus_di = 100 * minus_dm.ewm(alpha=a, adjust=False).mean() / atr_n
+    dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan)
+    return dx.ewm(alpha=a, adjust=False).mean(), plus_di, minus_di
+
+
+def realized_vol(df: pd.DataFrame, window: int | None = None) -> pd.Series:
+    """Annualised close-to-close realized volatility."""
+    window = window or CFG.rv_window
+    r = np.log(df["close"] / df["close"].shift(1))
+    return r.rolling(window).std() * np.sqrt(252)
+
+
+def pct_rank(series: pd.Series, lookback: int) -> float:
+    """Percentile (0..100) of the last value within its trailing `lookback` window."""
+    s = series.dropna().tail(lookback)
+    if len(s) < 2:
+        return float("nan")
+    last = s.iloc[-1]
+    return float((s < last).mean() * 100)

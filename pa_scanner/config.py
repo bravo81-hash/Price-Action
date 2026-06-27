@@ -42,6 +42,29 @@ class Config:
     allow_long: bool = True
     allow_short: bool = True
 
+    # --- regime: direction read (price-only, all environments) ---
+    ema_slow_daily: int = 50
+    adx_window: int = 14
+    adx_trend_min: float = 20.0        # below this -> Neutral (no directional conviction)
+
+    # --- regime: vol-state read (cheap / fair / rich) ---
+    # True IVR needs IV history (TWS path). On the free path the bucket is
+    # seeded from realized-vol rank instead; VRP nudge + backwardation still apply.
+    ivr_cheap: float = 30.0            # IVR < cheap -> cheap   (TWS path)
+    ivr_rich: float = 60.0            # IVR > rich  -> rich    (TWS path)
+    rvr_cheap: float = 30.0            # RV-rank < cheap -> cheap (free-path seed)
+    rvr_rich: float = 70.0            # RV-rank > rich  -> rich
+    vrp_nudge_cheaper: bool = True     # VRP <= 0 nudges one bucket cheaper
+    backwardation_force_cheap: bool = True   # inverted term structure forces cheap
+    rv_window: int = 20               # realized-vol window (days)
+    rv_rank_lookback: int = 252       # realized-vol percentile lookback
+
+    # --- regime: vol provider ---
+    iv_enrich_hits: bool = True        # 1A: pull yfinance ATM IV for signal hits
+    iv_front_dte: int = 30            # target DTE for the front expiry
+    iv_back_dte: int = 75             # target DTE for the back expiry
+    vol_source: str = "auto"          # "auto" (realized + IV-on-hits) | "tws" (later)
+
     # --- report ---
     spark_bars: int = 40
 

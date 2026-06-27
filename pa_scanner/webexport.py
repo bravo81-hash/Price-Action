@@ -14,7 +14,9 @@ import os
 
 def _row(r: dict) -> dict:
     d = {k: r.get(k) for k in
-         ("ticker", "signal", "signal_name", "side", "score", "last", "atr", "label", "level")}
+         ("ticker", "signal", "signal_name", "side", "score", "last", "atr", "label", "level",
+          "regime", "regime_adx", "vol_state", "vol_src", "cell", "structure",
+          "ivr", "iv", "rv", "vrp", "term")}
     if r.get("signal") == "S1":
         d["detail"] = r.get("pattern", "")
         d["dist"] = r.get("dist_atr", "")

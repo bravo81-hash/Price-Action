@@ -8,6 +8,8 @@ from .config import CFG
 from . import indicators as ind
 from . import candles as cnd
 from .rules import RULES
+from . import regime as rg
+from .volproviders import make_vol_provider
 
 
 @dataclass
@@ -140,4 +142,52 @@ def scan(bundle: dict) -> list:
         except Exception:
             continue
     rows.sort(key=lambda r: r["score"], reverse=True)
+    return rows
+
+
+def add_regime(rows, bundle, iv_enrich=None, vix_backwardation=None):
+    """Annotate each hit row with direction read, vol-state, and suggested structure.
+
+    Direction is price-only (computed for every hit). Vol-state uses the primary
+    provider (yfinance ATM IV) when iv_enrich is on, falling back per-ticker to the
+    realized-vol baseline on any error. Results are cached per ticker so a symbol
+    that fires both S1 and S2 is classified once.
+    """
+    if iv_enrich is None:
+        iv_enrich = CFG.iv_enrich_hits
+    primary, baseline = make_vol_provider(iv_enrich, vix_backwardation)
+    dir_cache, vol_cache = {}, {}
+
+    for r in rows:
+        t = r["ticker"]
+        daily = bundle[t][0]
+        if t not in dir_cache:
+            dir_cache[t] = rg.direction_read(daily)
+        direction, dmeta = dir_cache[t]
+
+        if t not in vol_cache:
+            vinp = None
+            if primary is not None:
+                try:
+                    vinp = primary.inputs_for(t, daily)
+                except Exception:
+                    vinp = None
+            if vinp is None:
+                vinp = baseline.inputs_for(t, daily)
+            vol_cache[t] = (rg.vol_read(vinp), vinp)
+        (vstate, vmeta), vinp = vol_cache[t]
+
+        cell, structure, dc = rg.strategy(direction, vstate)
+        pts = lambda x: None if x is None else round(x * 100, 1)
+        r["regime"] = direction
+        r["regime_adx"] = round(dmeta["adx"], 1)
+        r["vol_state"] = vstate
+        r["vol_src"] = vmeta["seed"]               # ivr | rvr | na (fidelity)
+        r["cell"] = cell
+        r["structure"] = f"{structure} ({dc})"
+        r["ivr"] = None if vmeta["ivr"] is None else round(vmeta["ivr"], 1)
+        r["iv"] = pts(vinp.iv)
+        r["rv"] = pts(vinp.rv)
+        r["vrp"] = pts(vmeta["vrp"])               # vol points (iv - rv)
+        r["term"] = pts(vmeta["term_slope"])       # vol points (front - back)
     return rows
