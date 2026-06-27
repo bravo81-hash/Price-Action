@@ -84,32 +84,123 @@ class YFinanceIVProvider:
 
 
 class TWSVolProvider:
-    """STUB (2B). Accurate vol via IBKR/TWS — implement with ib_async.
+    """Accurate vol via IBKR/TWS (ib_async). Connects once, reused across hits.
 
-    Implementation outline:
-      ib = IB(); ib.connect('127.0.0.1', 7496, clientId=N)
-      # IVR (needs IV history — this is what the free path cannot do):
-      bars = ib.reqHistoricalData(underlying, '', '1 Y', '1 day',
-                 'OPTION_IMPLIED_VOLATILITY', useRTH=True)
-      ivr = percentile(latest, [b.close for b in bars])           # 0..100
-      # Current ATM IV + term slope:
-      params = ib.reqSecDefOptParams(sym, '', secType, conId)
-      # pick front/back expiries near CFG.iv_front_dte / iv_back_dte, qualify the
-      # ATM strike per expiry, reqMktData(genericTick='106') -> modelGreeks.impliedVol
-      term_slope = iv_front - iv_back ; backwardation = iv_front > iv_back
-      # RV: indicators.realized_vol(daily), or 'HISTORICAL_VOLATILITY' bars.
-      return VolInputs(rv, rv_rank, iv=iv_front, ivr=ivr, vrp=iv_front-rv,
-                       term_slope=term_slope, backwardation=backwardation, source='tws')
+    Gives true IVR (1-yr underlying implied-vol history — impossible on the free
+    path), real ATM IV + term structure from live option greeks, and VRP. Because
+    IBKR throttles historical-data requests (~60 / 10 min), only the top
+    `tws_max_enrich` hits are enriched here; the rest fall back to realized vol.
     """
 
+    enrich_cap = None  # set per-instance from CFG.tws_max_enrich
+
+    def __init__(self, host="127.0.0.1", port=7496, client_id=0,
+                 timeout=8.0, vix_backwardation=None):
+        import random
+        from ib_async import IB
+        self.vix_bw = vix_backwardation
+        self.enrich_cap = CFG.tws_max_enrich
+        self.client_id = client_id or random.randint(10_000, 9_999_999)  # dynamic
+        self.ib = IB()
+        self.ib.connect(host, port, clientId=self.client_id, timeout=timeout)
+
+    def close(self):
+        try:
+            self.ib.disconnect()
+        except Exception:
+            pass
+
+    def _atm_iv(self, stk, expiry, atm_strike, trading_class):
+        from ib_async import Option
+        ivs = []
+        for right in ("C", "P"):
+            try:
+                opt = Option(stk.symbol, expiry, atm_strike, right, "SMART",
+                             tradingClass=trading_class)
+                q = self.ib.qualifyContracts(opt)
+                if not q:
+                    continue
+                tk = self.ib.reqMktData(q[0], "", False, False)
+                self.ib.sleep(2.0)
+                mg = tk.modelGreeks
+                if mg and mg.impliedVol and mg.impliedVol > 0:
+                    ivs.append(float(mg.impliedVol))
+                self.ib.cancelMktData(q[0])
+            except Exception:
+                continue
+        return sum(ivs) / len(ivs) if ivs else None
+
+    def _chain_atm(self, stk, spot):
+        import datetime as dt
+        try:
+            params = self.ib.reqSecDefOptParams(stk.symbol, "", stk.secType, stk.conId)
+        except Exception:
+            return None, None
+        p = next((x for x in params if x.exchange == "SMART"), params[0] if params else None)
+        if p is None or not p.expirations or not p.strikes:
+            return None, None
+        today = dt.date.today()
+
+        def dte(e):
+            return (dt.date(int(e[:4]), int(e[4:6]), int(e[6:8])) - today).days
+
+        valid = [(e, dte(e)) for e in sorted(p.expirations) if dte(e) >= 1]
+        if not valid:
+            return None, None
+        front = min(valid, key=lambda z: abs(z[1] - CFG.iv_front_dte))[0]
+        back = min(valid, key=lambda z: abs(z[1] - CFG.iv_back_dte))[0]
+        atm = min(p.strikes, key=lambda s: abs(s - spot))
+        iv_f = self._atm_iv(stk, front, atm, p.tradingClass)
+        iv_b = self._atm_iv(stk, back, atm, p.tradingClass) if back != front else None
+        return iv_f, iv_b
+
     def inputs_for(self, ticker, daily) -> VolInputs:
-        raise NotImplementedError("TWS vol provider not implemented yet (2B stub)")
+        from ib_async import Stock
+        rv, rank = _rv_and_rank(daily)
+        fallback = VolInputs(rv=rv, rv_rank=rank, backwardation=self.vix_bw, source="rv")
+        try:
+            q = self.ib.qualifyContracts(Stock(ticker, "SMART", "USD"))
+            if not q:
+                return fallback
+            stk = q[0]
+            spot = float(daily["close"].iloc[-1])
+
+            # true IVR from 1-yr underlying option-implied-vol history
+            ivr = None
+            bars = self.ib.reqHistoricalData(
+                stk, "", "1 Y", "1 day", "OPTION_IMPLIED_VOLATILITY",
+                useRTH=True, formatDate=1)
+            ivs = [b.close for b in bars if b.close and b.close > 0]
+            if len(ivs) > 20:
+                lo, hi = min(ivs), max(ivs)
+                ivr = 100.0 * (ivs[-1] - lo) / (hi - lo) if hi > lo else None
+            iv_hist = ivs[-1] if ivs else None
+
+            iv_f, iv_b = self._chain_atm(stk, spot)
+            iv = iv_f if iv_f is not None else iv_hist
+            term = (iv_f - iv_b) if (iv_f is not None and iv_b is not None) else None
+            bw = (iv_f > iv_b) if (iv_f is not None and iv_b is not None) else self.vix_bw
+            vrp = (iv - rv) if (iv is not None and rv is not None) else None
+            return VolInputs(rv=rv, rv_rank=rank, iv=iv, ivr=ivr, vrp=vrp,
+                             term_slope=term, backwardation=bw, source="tws")
+        except Exception:
+            return fallback
 
 
 def make_vol_provider(iv_enrich=True, vix_backwardation=None):
-    """Return (primary_or_None, baseline). Caller tries primary, falls back to baseline."""
+    """Return (primary_or_None, baseline). Caller tries primary, falls back to baseline.
+    With vol_source='tws' the primary is a live IBKR connection; if the connect
+    fails (TWS not running, API off) it degrades to the yfinance approximation."""
     if CFG.vol_source == "tws":
-        print("[regime] TWS provider is a stub; using yfinance/realized approximation")
+        try:
+            tws = TWSVolProvider(host=CFG.tws_host, port=CFG.tws_port,
+                                 client_id=CFG.tws_client_id, timeout=CFG.tws_timeout,
+                                 vix_backwardation=vix_backwardation)
+            print(f"[regime] TWS connected at {CFG.tws_host}:{CFG.tws_port} "
+                  f"(clientId {tws.client_id}); enriching top {tws.enrich_cap} hits")
+            return tws, RealizedVolProvider(vix_backwardation)
+        except Exception as e:
+            print(f"[regime] TWS connect failed ({e}); using yfinance/realized approximation")
     if iv_enrich:
         return YFinanceIVProvider(vix_backwardation), RealizedVolProvider(vix_backwardation)
     return None, RealizedVolProvider(vix_backwardation)

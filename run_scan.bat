@@ -10,7 +10,7 @@ if exist ".venv\Scripts\activate.bat" call ".venv\Scripts\activate.bat"
 echo ============================================
 echo   Price-Action scan
 echo ============================================
-python -m pa_scanner.cli --web docs
+python -m pa_scanner.cli --web docs --tws
 if errorlevel 1 (
     echo.
     echo Scan FAILED - see messages above.

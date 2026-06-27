@@ -181,40 +181,48 @@ def add_regime(rows, bundle, iv_enrich=None, vix_backwardation=None):
     if iv_enrich is None:
         iv_enrich = CFG.iv_enrich_hits
     primary, baseline = make_vol_provider(iv_enrich, vix_backwardation)
-    dir_cache, vol_cache = {}, {}
+    cap = getattr(primary, "enrich_cap", None)   # TWS: limit enriched hits (pacing)
+    dir_cache, vol_cache, enriched = {}, {}, set()
 
-    for r in rows:
-        t = r["ticker"]
-        daily = bundle[t][0]
-        if t not in dir_cache:
-            dir_cache[t] = rg.direction_read(daily)
-        direction, dmeta = dir_cache[t]
+    try:
+        for r in rows:
+            t = r["ticker"]
+            daily = bundle[t][0]
+            if t not in dir_cache:
+                dir_cache[t] = rg.direction_read(daily)
+            direction, dmeta = dir_cache[t]
 
-        if t not in vol_cache:
-            vinp = None
-            if primary is not None:
-                try:
-                    vinp = primary.inputs_for(t, daily)
-                except Exception:
-                    vinp = None
-            if vinp is None:
-                vinp = baseline.inputs_for(t, daily)
-            vol_cache[t] = (rg.vol_read(vinp), vinp)
-        (vstate, vmeta), vinp = vol_cache[t]
+            if t not in vol_cache:
+                vinp = None
+                budget_ok = cap is None or t in enriched or len(enriched) < cap
+                if primary is not None and budget_ok:
+                    try:
+                        vinp = primary.inputs_for(t, daily)
+                        if vinp is not None and vinp.source != "rv":
+                            enriched.add(t)        # counts only true enrichments
+                    except Exception:
+                        vinp = None
+                if vinp is None:
+                    vinp = baseline.inputs_for(t, daily)
+                vol_cache[t] = (rg.vol_read(vinp), vinp)
+            (vstate, vmeta), vinp = vol_cache[t]
 
-        matrix_dir = rg.signal_direction(r["side"]) if CFG.structure_from == "signal" else direction
-        cell, structure, dc = rg.strategy(matrix_dir, vstate)
-        pts = lambda x: None if x is None else round(x * 100, 1)
-        r["regime"] = direction                    # trend backdrop (context)
-        r["regime_adx"] = round(dmeta["adx"], 1)
-        r["align"] = rg.alignment(direction, r["side"])   # with | counter | neutral
-        r["vol_state"] = vstate
-        r["vol_src"] = vmeta["seed"]               # ivr | rvr | na (fidelity)
-        r["cell"] = cell
-        r["structure"] = f"{structure} ({dc})"     # expresses the signal's side
-        r["ivr"] = None if vmeta["ivr"] is None else round(vmeta["ivr"], 1)
-        r["iv"] = pts(vinp.iv)
-        r["rv"] = pts(vinp.rv)
-        r["vrp"] = pts(vmeta["vrp"])               # vol points (iv - rv)
-        r["term"] = pts(vmeta["term_slope"])       # vol points (front - back)
+            matrix_dir = rg.signal_direction(r["side"]) if CFG.structure_from == "signal" else direction
+            cell, structure, dc = rg.strategy(matrix_dir, vstate)
+            pts = lambda x: None if x is None else round(x * 100, 1)
+            r["regime"] = direction                    # trend backdrop (context)
+            r["regime_adx"] = round(dmeta["adx"], 1)
+            r["align"] = rg.alignment(direction, r["side"])   # with | counter | neutral
+            r["vol_state"] = vstate
+            r["vol_src"] = vmeta["seed"]               # ivr | rvr | na (fidelity)
+            r["cell"] = cell
+            r["structure"] = f"{structure} ({dc})"     # expresses the signal's side
+            r["ivr"] = None if vmeta["ivr"] is None else round(vmeta["ivr"], 1)
+            r["iv"] = pts(vinp.iv)
+            r["rv"] = pts(vinp.rv)
+            r["vrp"] = pts(vmeta["vrp"])               # vol points (iv - rv)
+            r["term"] = pts(vmeta["term_slope"])       # vol points (front - back)
+    finally:
+        if hasattr(primary, "close"):
+            primary.close()
     return rows

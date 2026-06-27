@@ -5,7 +5,7 @@ cd "$(dirname "$0")" || exit 1
 [ -f .venv/bin/activate ] && source .venv/bin/activate
 
 echo "=== Price-Action scan ==="
-if ! python3 -m pa_scanner.cli --web docs; then
+if ! python3 -m pa_scanner.cli --web docs --tws; then
     echo "Scan failed."
     read -n1 -r -p "Press any key to close..."
     exit 1

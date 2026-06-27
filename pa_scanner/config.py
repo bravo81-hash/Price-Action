@@ -75,6 +75,13 @@ class Config:
     iv_back_dte: int = 75             # target DTE for the back expiry
     vol_source: str = "auto"          # "auto" (realized + IV-on-hits) | "tws" (later)
 
+    # --- TWS / IBKR (accurate vol via ib_async) ---
+    tws_host: str = "127.0.0.1"
+    tws_port: int = 7496              # live TWS 7496 | paper 7497 | gateway 4001/4002
+    tws_client_id: int = 0           # 0 -> random dynamic id (avoids collisions)
+    tws_timeout: float = 8.0
+    tws_max_enrich: int = 25         # cap TWS-enriched hits (IBKR hist-data pacing ~60/10min)
+
     # Which direction drives the strategy structure:
     #   "signal" -> express the signal's own side (long->bullish row, short->bearish)
     #   "regime" -> express the trend regime (legacy; can contradict the signal)

@@ -198,16 +198,24 @@ it*:
   yfinance option chains → real **VRP** (IV vs realized vol) + per-ticker **term
   slope**; vol-state is seeded from realized-vol rank. Clearly tagged `rvr`.
   `--no-iv` skips the option fetch entirely (realized-vol only, fastest).
-- **Personal PC + TWS (later):** `pa_scanner/volproviders.py` has a
-  `TWSVolProvider` stub with the full ib_async implementation outline (IBKR
-  `OPTION_IMPLIED_VOLATILITY` history for true **IVR**, chain for term
-  structure). Fill it in, then run with `--tws` for the accurate read. Until
-  then `--tws` prints a note and falls back to the approximation.
+- **Personal PC + TWS (`--tws`):** connects to a running TWS / IB Gateway via
+  `ib_async` (`config.py`: `tws_host`/`tws_port`/`tws_client_id`; default live
+  port 7496, dynamic clientId so it never collides with your other API apps) and
+  pulls, for each hit: **true IVR** (1-yr underlying `OPTION_IMPLIED_VOLATILITY`
+  history — impossible on the free path), **real ATM IV + term structure** from
+  live option greeks, and **VRP**. Tagged `ivr`. IBKR throttles historical data
+  (~60 / 10 min), so only the top `tws_max_enrich` (default 25) hits get the full
+  TWS read; the rest fall back to realized vol. If TWS isn't running / the API is
+  off, `--tws` degrades gracefully to the yfinance approximation.
+
+  Requires: `pip install ib_async`, and TWS/IBG with **API enabled** (Configure →
+  API → Settings → *Enable ActiveX and Socket Clients*, port 7496, 127.0.0.1
+  trusted). Live market-data subscriptions affect which greeks populate.
 
 All thresholds (IVR/RV-rank buckets, ADX trend floor, VRP/backwardation rules,
-target DTEs for the IV pull) live in `config.py`.
+target DTEs for the IV pull, TWS connection) live in `config.py`.
 
-> Note: live IV fetching (yfinance option chains and TWS) can't run in the build
+> Note: live data fetching (yfinance option chains, TWS) can't run in the build
 > sandbox, so the regime **logic, matrix, and rendering are verified by
-> self-tests** (37 checks), while the IV fetch is structure-verified — it runs on
-> your machine / the cloud runner.
+> self-tests** (54 checks) and the **TWS-down fallback path is verified**; the
+> live IBKR fetch itself is structure-verified — it runs on your machine.
