@@ -2,6 +2,8 @@
 
 Examples:
   python -m pa_scanner.cli                       # full scan -> pa_report.html
+  python -m pa_scanner.cli --web docs            # write JSON for the Pages dashboard
+  python -m pa_scanner.cli --web docs --out docs/pa_report.html
   python -m pa_scanner.cli --long-only
   python -m pa_scanner.cli --out today.html --limit 150
   python -m pa_scanner.cli --tickers AAPL MSFT NVDA SPY
@@ -13,11 +15,15 @@ from . import universe as uni
 from . import data as dl
 from .scanner import scan
 from .report import write_report
+from .webexport import write_web
 
 
 def main():
     ap = argparse.ArgumentParser(description="Weekly-level / trend-pullback price-action scanner")
-    ap.add_argument("--out", default="pa_report.html")
+    ap.add_argument("--out", default=None, help="self-contained HTML output path")
+    ap.add_argument("--web", metavar="DIR", default=None,
+                    help="write JSON snapshot for the static dashboard into DIR (e.g. docs)")
+    ap.add_argument("--no-html", action="store_true", help="skip the standalone HTML report")
     ap.add_argument("--long-only", action="store_true")
     ap.add_argument("--short-only", action="store_true")
     ap.add_argument("--limit", type=int, default=None, help="cap universe size (debug)")
@@ -45,8 +51,15 @@ def main():
     print(f"[scan] {len(bundle)} liquid symbols; running rules...")
 
     rows = scan(bundle)
-    write_report(rows, a.out, scanned=len(bundle), universe=len(syms))
-    print(f"[scan] {len(rows)} signals -> {a.out}")
+
+    if a.web:
+        path = write_web(rows, a.web, scanned=len(bundle), universe=len(syms))
+        print(f"[scan] {len(rows)} signals -> {path} (+ dated snapshot)")
+
+    if not a.no_html:
+        out = a.out or "pa_report.html"
+        write_report(rows, out, scanned=len(bundle), universe=len(syms))
+        print(f"[scan] HTML report -> {out}")
 
 
 if __name__ == "__main__":

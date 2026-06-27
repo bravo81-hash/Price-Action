@@ -25,7 +25,7 @@ def check(name, cond):
 
 
 def _frame(close, high, low, openp):
-    idx = pd.bdate_range(end=pd.Timestamp.today().normalize(), periods=len(close))
+    idx = pd.bdate_range(start="2023-01-02", periods=len(close))
     vol = np.full(len(close), 2_000_000.0)
     vol[-1] = 4_000_000.0  # volume expansion on the breakout bar
     return pd.DataFrame({"open": openp, "high": high, "low": low,

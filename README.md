@@ -116,3 +116,39 @@ report as the source of truth and Pine for fast visual confirmation / screening.
   reach Yahoo); run an actual scan on a machine with internet.
 - Patterns are evaluated on the **last completed daily bar** — run the scan after
   the US close (or intraday accepting the forming bar).
+
+## Run on any computer (GitHub Pages + Actions)
+
+The work the system does splits in two: **compute** (pull data, run signals —
+needs Python + internet) and **viewing** (browser only). The viewing layer is a
+static dashboard at `docs/index.html` that reads `docs/data/latest.json`, so a
+locked-down machine with no installs just opens a URL.
+
+**Live dashboard:** https://bravo81-hash.github.io/Price-Action/
+
+### One-time setup
+1. Repo must be **public** for free GitHub Pages (this repo only — your private
+   strategy repos are unaffected).
+2. **Settings → Pages → Build and deployment → Source: Deploy from a branch →
+   Branch `main`, folder `/docs` → Save.** Wait ~1 min; the URL above goes live.
+
+### Auto-updates (no computer needed)
+The `scan` GitHub Action (`.github/workflows/scan.yml`) runs the scan in the
+cloud on weekdays at **22:30 UTC** (after the US close), writes a JSON snapshot,
+and commits it. It uses the built-in Actions token — no PAT required.
+Trigger it by hand anytime: **Actions tab → scan → Run workflow**.
+
+### Run it from your personal PC
+Same command writes the same snapshot:
+```bash
+python -m pa_scanner.cli --web docs --no-html      # JSON only
+python -m pa_scanner.cli --web docs                 # JSON + local HTML
+git add docs/data && git commit -m "scan" && git push
+```
+The dashboard picks up the new snapshot on reload. Past snapshots are kept (last
+60 days) and selectable from the dropdown.
+
+### Fully offline / private alternative
+`pa_report.html` (from a plain `python -m pa_scanner.cli`) is a single
+self-contained file with the data baked in. Drop it in OneDrive/Drive and open it
+in any browser — no hosting, stays private.
