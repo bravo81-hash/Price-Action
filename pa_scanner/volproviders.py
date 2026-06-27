@@ -96,13 +96,18 @@ class TWSVolProvider:
 
     def __init__(self, host="127.0.0.1", port=7496, client_id=0,
                  timeout=8.0, vix_backwardation=None):
+        import logging
         import random
         from ib_async import IB
+        logging.getLogger("ib_async").setLevel(logging.CRITICAL)  # quiet routine API errors
         self.vix_bw = vix_backwardation
         self.enrich_cap = CFG.tws_max_enrich
+        self._greek_wait = CFG.tws_greek_wait
         self.client_id = client_id or random.randint(10_000, 9_999_999)  # dynamic
         self.ib = IB()
         self.ib.connect(host, port, clientId=self.client_id, timeout=timeout)
+        # so model greeks populate after the close / without live ticks
+        self.ib.reqMarketDataType(CFG.tws_market_data_type)
 
     def close(self):
         try:
@@ -110,22 +115,27 @@ class TWSVolProvider:
         except Exception:
             pass
 
-    def _atm_iv(self, stk, expiry, atm_strike, trading_class):
+    def _atm_iv(self, symbol, expiry, spot):
+        """Mean model IV of the ATM call & put that actually exist for this expiry.
+        Strikes are enumerated per-expiry via reqContractDetails (the union list
+        from reqSecDefOptParams contains strikes that don't trade every expiry)."""
         from ib_async import Option
         ivs = []
         for right in ("C", "P"):
             try:
-                opt = Option(stk.symbol, expiry, atm_strike, right, "SMART",
-                             tradingClass=trading_class)
-                q = self.ib.qualifyContracts(opt)
-                if not q:
-                    continue
-                tk = self.ib.reqMktData(q[0], "", False, False)
-                self.ib.sleep(2.0)
+                cds = self.ib.reqContractDetails(Option(symbol, expiry, 0, right, "SMART"))
+            except Exception:
+                cds = []
+            if not cds:
+                continue
+            con = min(cds, key=lambda cd: abs(cd.contract.strike - spot)).contract
+            try:
+                tk = self.ib.reqMktData(con, "", False, False)
+                self.ib.sleep(self._greek_wait)
                 mg = tk.modelGreeks
                 if mg and mg.impliedVol and mg.impliedVol > 0:
                     ivs.append(float(mg.impliedVol))
-                self.ib.cancelMktData(q[0])
+                self.ib.cancelMktData(con)
             except Exception:
                 continue
         return sum(ivs) / len(ivs) if ivs else None
@@ -137,7 +147,7 @@ class TWSVolProvider:
         except Exception:
             return None, None
         p = next((x for x in params if x.exchange == "SMART"), params[0] if params else None)
-        if p is None or not p.expirations or not p.strikes:
+        if p is None or not p.expirations:
             return None, None
         today = dt.date.today()
 
@@ -149,9 +159,8 @@ class TWSVolProvider:
             return None, None
         front = min(valid, key=lambda z: abs(z[1] - CFG.iv_front_dte))[0]
         back = min(valid, key=lambda z: abs(z[1] - CFG.iv_back_dte))[0]
-        atm = min(p.strikes, key=lambda s: abs(s - spot))
-        iv_f = self._atm_iv(stk, front, atm, p.tradingClass)
-        iv_b = self._atm_iv(stk, back, atm, p.tradingClass) if back != front else None
+        iv_f = self._atm_iv(stk.symbol, front, spot)
+        iv_b = self._atm_iv(stk.symbol, back, spot) if back != front else None
         return iv_f, iv_b
 
     def inputs_for(self, ticker, daily) -> VolInputs:

@@ -225,4 +225,5 @@ def add_regime(rows, bundle, iv_enrich=None, vix_backwardation=None):
     finally:
         if hasattr(primary, "close"):
             primary.close()
+    print(f"[regime] vol-enriched {len(enriched)}/{len(dir_cache)} hit-tickers")
     return rows

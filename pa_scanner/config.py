@@ -81,6 +81,8 @@ class Config:
     tws_client_id: int = 0           # 0 -> random dynamic id (avoids collisions)
     tws_timeout: float = 8.0
     tws_max_enrich: int = 25         # cap TWS-enriched hits (IBKR hist-data pacing ~60/10min)
+    tws_market_data_type: int = 2    # 1 live | 2 frozen | 3 delayed | 4 delayed-frozen
+    tws_greek_wait: float = 2.0      # seconds to let model greeks populate per contract
 
     # Which direction drives the strategy structure:
     #   "signal" -> express the signal's own side (long->bullish row, short->bearish)
