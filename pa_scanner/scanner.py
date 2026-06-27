@@ -170,7 +170,27 @@ def scan(bundle: dict) -> list:
     return rows
 
 
-def add_regime(rows, bundle, iv_enrich=None, vix_backwardation=None):
+def live_status(row, live_price, atr):
+    """Given a real-time price, where does the setup stand right now?
+    Returns (status_word, metric). Metric is ATR-distance to the trigger for
+    S1/S2, or position-in-range for S3."""
+    sig, side, lvl = row.get("signal"), row.get("side"), row.get("level")
+    if sig == "S2" and lvl:
+        past = live_price > lvl if side == "long" else live_price < lvl
+        d = abs(live_price - lvl) / atr if atr else None
+        return ("triggered" if past else "pending"), (round(d, 2) if d is not None else None)
+    if sig == "S1" and lvl:
+        d = abs(live_price - lvl) / atr if atr else None
+        return ("at level" if (d is not None and d <= 1) else "away"), (round(d, 2) if d is not None else None)
+    if sig == "S3":
+        lo, hi = row.get("range_lo"), row.get("range_hi")
+        if lo and hi and hi > lo:
+            pos = (live_price - lo) / (hi - lo)
+            return ("in range" if 0 <= pos <= 1 else "broke out"), round(pos, 2)
+    return ("", None)
+
+
+def add_regime(rows, bundle, iv_enrich=None, vix_backwardation=None, live=False):
     """Annotate each hit row with direction read, vol-state, and suggested structure.
 
     Direction is price-only (computed for every hit). Vol-state uses the primary
@@ -182,7 +202,8 @@ def add_regime(rows, bundle, iv_enrich=None, vix_backwardation=None):
         iv_enrich = CFG.iv_enrich_hits
     primary, baseline = make_vol_provider(iv_enrich, vix_backwardation)
     cap = getattr(primary, "enrich_cap", None)   # TWS: limit enriched hits (pacing)
-    dir_cache, vol_cache, enriched = {}, {}, set()
+    is_live = live and hasattr(primary, "snapshot")   # real-time prices available?
+    dir_cache, vol_cache, live_cache, enriched = {}, {}, {}, set()
 
     try:
         for r in rows:
@@ -222,8 +243,22 @@ def add_regime(rows, bundle, iv_enrich=None, vix_backwardation=None):
             r["rv"] = pts(vinp.rv)
             r["vrp"] = pts(vmeta["vrp"])               # vol points (iv - rv)
             r["term"] = pts(vmeta["term_slope"])       # vol points (front - back)
+
+            if is_live:                                 # real-time refresh (last hour)
+                if t not in live_cache:
+                    live_cache[t] = primary.snapshot(t)
+                snap = live_cache[t]
+                if snap and snap.get("last"):
+                    lp = snap["last"]
+                    r["live"] = round(lp, 2)
+                    status, metric = live_status(r, lp, r.get("atr") or 0.0)
+                    r["live_status"] = status
+                    r["live_dist"] = metric
     finally:
         if hasattr(primary, "close"):
             primary.close()
+    if is_live:
+        n_live = sum(1 for r in rows if r.get("live") is not None)
+        print(f"[live] real-time prices on {n_live}/{len(rows)} signals")
     print(f"[regime] vol-enriched {len(enriched)}/{len(dir_cache)} hit-tickers")
     return rows

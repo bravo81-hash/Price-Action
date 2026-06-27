@@ -49,6 +49,53 @@ Open the resulting HTML in any browser. The table sorts (click headers),
 filters (All / S1 / S2 / Long / Short + ticker search), exports CSV, and links
 each row to its TradingView chart. Sparklines show the last 40 daily closes.
 
+## Live last-hour workflow (real-time TWS)
+
+The price-action signals are computed on the **daily bar**, which does not close
+until 4 pm ET. The final hour is the best intraday time to run the scan (the bar
+is ~93% formed, so it is a strong *preview* of the closing signal), but it is a
+preview — a setup can still change in the last minutes. Confirm in TWS before
+executing.
+
+```bash
+python -m pa_scanner.cli --tws --live     # or double-click run_scan_live.bat
+```
+
+`--live` implies `--tws` and switches IBKR to **live** market data. It:
+
+1. Screens the full universe on yfinance daily bars (~15 min delayed — fine for
+   5–10 day swing setups).
+2. Pulls **real-time IV / IVR / vol** for the top hits from TWS (as `--tws` does).
+3. Pulls a **real-time price snapshot** for each hit and adds a **Live** column:
+   the current price plus a live trigger status —
+   - **S2**: `triggered` (price already past the breakout level) or `pending`,
+     with Δ = ATR-distance to the level.
+   - **S1**: `at level` (within 1 ATR of the weekly S/R) or `away`.
+   - **S3**: `in range` or `broke out`, with the position in the range (0–1).
+
+`run_scan_live.bat` / `run_scan_live.command` are **local-only** (no commit, no
+push) — you are at your trading PC in the last hour, reading the local
+`pa_report.html`. Re-run as often as you like as the hour progresses; each run
+re-pulls real-time prices and re-evaluates triggers.
+
+**Suggested last-hour loop:**
+
+1. ~3:00 pm ET, run the live button. Sort by **Score**.
+2. For each candidate, read **Sig** (S1/S2/S3) + **Side** + **Structure** (how to
+   express it given vol), then the **Live** status — is it triggered now, or
+   pending and how far?
+3. Check **Regime** (`with` trend vs `⚠ counter` = riskier) and **Vol**
+   (cheap → favour debit structures; rich → favour credit / condors).
+4. For the names you like, pull the chart in **TWS** (real-time), confirm the
+   candle / breakout is holding into the close, size the structure, and execute.
+5. Re-run near 3:45 pm to catch setups that trigger late.
+
+**Limitations (by design):** the broad screen is ~15 min delayed, so a brand-new
+breakout in the final ~15 min may not be a hit yet — catch those with TWS
+watchlists / alerts. The structure is a starting point; size and strikes are
+chosen in TWS. If `iv`/`term` are blank but `ivr` is present, it is market-data
+entitlement — set `tws_market_data_type` in `config.py` (1 live, 3/4 delayed).
+
 ## Configuration
 
 All knobs live in `pa_scanner/config.py` (`CFG`). Key ones:

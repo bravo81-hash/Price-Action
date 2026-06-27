@@ -245,6 +245,21 @@ def main():
     check("neutral signal -> neutral structure", nrows[0]["structure"] in ("Calendar (D)", "Iron Condor (C)"))
     check("neutral signal -> align neutral", nrows[0]["align"] == "neutral")
 
+    # --- live_status (real-time trigger evaluation) ---
+    from .scanner import live_status
+    s2L = {"signal": "S2", "side": "long", "level": 100.0}
+    check("S2 long triggered above level", live_status(s2L, 102.0, 2.0) == ("triggered", 1.0))
+    check("S2 long pending below level", live_status(s2L, 99.0, 2.0)[0] == "pending")
+    s2S = {"signal": "S2", "side": "short", "level": 100.0}
+    check("S2 short triggered below level", live_status(s2S, 98.0, 2.0)[0] == "triggered")
+    s1 = {"signal": "S1", "side": "short", "level": 50.0}
+    check("S1 at level within 1 ATR", live_status(s1, 50.5, 1.0) == ("at level", 0.5))
+    check("S1 away beyond 1 ATR", live_status(s1, 53.0, 1.0)[0] == "away")
+    s3 = {"signal": "S3", "side": "neutral", "range_lo": 90.0, "range_hi": 110.0}
+    check("S3 in range -> position", live_status(s3, 100.0, 2.0) == ("in range", 0.5))
+    check("S3 broke out above", live_status(s3, 115.0, 2.0)[0] == "broke out")
+    check("live_status zero-ATR safe", live_status(s2L, 102.0, 0.0)[0] == "triggered")
+
     print(f"\n{len(PASS)} passed, {len(FAIL)} failed")
     if FAIL:
         print("FAILED:", ", ".join(FAIL))

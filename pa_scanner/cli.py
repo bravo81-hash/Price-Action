@@ -41,6 +41,8 @@ def main():
                     help="skip yfinance ATM-IV enrichment; vol-state from realized vol only")
     ap.add_argument("--tws", action="store_true",
                     help="prefer the TWS vol provider (stub for now; falls back to approx)")
+    ap.add_argument("--live", action="store_true",
+                    help="last-hour mode: real-time TWS prices + live trigger status (implies --tws, live data)")
     ap.add_argument("--long-only", action="store_true")
     ap.add_argument("--short-only", action="store_true")
     ap.add_argument("--no-neutral", action="store_true", help="disable S3 range/chop signals")
@@ -56,6 +58,9 @@ def main():
         CFG.allow_neutral = False
     if a.tws:
         CFG.vol_source = "tws"
+    if a.live:                          # real-time last-hour mode
+        CFG.vol_source = "tws"
+        CFG.tws_market_data_type = 1    # live ticks for prices + greeks
 
     syms = a.tickers or uni.build_universe()
     if a.limit:
@@ -77,7 +82,7 @@ def main():
           + (" + IV enrichment" if (CFG.iv_enrich_hits and not a.no_iv) else "") + "...")
     vix_bw = fetch_vix_backwardation()
     add_regime(rows, bundle, iv_enrich=(CFG.iv_enrich_hits and not a.no_iv),
-               vix_backwardation=vix_bw)
+               vix_backwardation=vix_bw, live=a.live)
 
     if a.web:
         path = write_web(rows, a.web, scanned=len(bundle), universe=len(syms))

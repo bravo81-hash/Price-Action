@@ -108,6 +108,7 @@ _TEMPLATE = """<!doctype html>
   <th data-k="side">Side</th>
   <th data-k="score" class="num">Score</th>
   <th data-k="last" class="num">Last</th>
+  <th data-k="live" class="num">Live</th>
   <th data-k="level" class="num">Level</th>
   <th data-k="dist" class="num">Dist/Brk(ATR)</th>
   <th data-k="detail">Detail</th>
@@ -141,6 +142,15 @@ function volTitle(r){
   return f.join(" \u00b7 ") || "no IV data";
 }
 function volCell(r){ if(!r.vol_state) return ""; return `${r.vol_state} <span class="src">${r.vol_src||''}</span>`; }
+function liveCell(r){
+  if(r.live==null) return "";
+  const S={'triggered':'#3fb950','pending':'#d29922','at level':'#58a6ff','in range':'#8b949e','broke out':'#d29922','away':'#8b949e'};
+  const c=S[r.live_status]||'#c9d1d9';
+  const st=r.live_status?` <span class="src" style="color:${c}">${r.live_status}</span>`:'';
+  const lbl=(r.live_status==='in range'||r.live_status==='broke out')?'pos':'\u0394';
+  const d=(r.live_dist!=null)?` <span class="src">${lbl} ${r.live_dist}</span>`:'';
+  return `${r.live}${st}${d}`;
+}
 function structCell(r){
   if(!r.structure) return "";
   const m=String(r.structure).match(/\\((\\w)\\)$/), dc=m?m[1]:'';
@@ -167,6 +177,7 @@ function render(){
       `<td class="${r.side}">${r.side}</td>`+
       `<td class="num score">${r.score.toFixed(3)}</td>`+
       `<td class="num">${r.last}</td>`+
+      `<td class="num">${liveCell(r)}</td>`+
       `<td class="num">${r.level??""}</td>`+
       `<td class="num">${r.dist??""}</td>`+
       `<td>${r.detail??""}</td>`+
@@ -193,7 +204,7 @@ document.querySelectorAll(".bar button[data-f]").forEach(btn=>btn.onclick=()=>{
 });
 $("#q").oninput=e=>{q=e.target.value.trim().toLowerCase(); render();};
 $("#csv").onclick=()=>{
-  const cols=["ticker","signal","side","score","last","level","dist","detail","volx","atr",
+  const cols=["ticker","signal","side","score","last","live","live_status","live_dist","level","dist","detail","volx","atr",
               "regime","regime_adx","align","vol_state","vol_src","cell","structure",
               "ivr","iv","rv","vrp","term","label"];
   const head=cols.join(",");

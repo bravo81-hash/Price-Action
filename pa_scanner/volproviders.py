@@ -115,6 +115,31 @@ class TWSVolProvider:
         except Exception:
             pass
 
+    def snapshot(self, ticker):
+        """Real-time price snapshot for live (last-hour) use: last + day high/low."""
+        import math
+        from ib_async import Stock
+
+        def _val(x):
+            return x if (x is not None and not (isinstance(x, float) and math.isnan(x))) else None
+
+        try:
+            q = self.ib.qualifyContracts(Stock(ticker, "SMART", "USD"))
+            if not q:
+                return None
+            tk = self.ib.reqMktData(q[0], "", True, False)  # snapshot
+            self.ib.sleep(CFG.tws_snapshot_wait)
+            price = _val(tk.last) or _val(tk.marketPrice()) or _val(tk.close)
+            hi, lo = _val(tk.high), _val(tk.low)
+            self.ib.cancelMktData(q[0])
+            if price is None:
+                return None
+            return {"last": float(price),
+                    "high": float(hi) if hi else None,
+                    "low": float(lo) if lo else None}
+        except Exception:
+            return None
+
     def _atm_iv(self, symbol, expiry, spot):
         """Mean model IV of the ATM call & put that actually exist for this expiry.
         Strikes are enumerated per-expiry via reqContractDetails (the union list
