@@ -177,14 +177,16 @@ def add_regime(rows, bundle, iv_enrich=None, vix_backwardation=None):
             vol_cache[t] = (rg.vol_read(vinp), vinp)
         (vstate, vmeta), vinp = vol_cache[t]
 
-        cell, structure, dc = rg.strategy(direction, vstate)
+        matrix_dir = rg.signal_direction(r["side"]) if CFG.structure_from == "signal" else direction
+        cell, structure, dc = rg.strategy(matrix_dir, vstate)
         pts = lambda x: None if x is None else round(x * 100, 1)
-        r["regime"] = direction
+        r["regime"] = direction                    # trend backdrop (context)
         r["regime_adx"] = round(dmeta["adx"], 1)
+        r["align"] = rg.alignment(direction, r["side"])   # with | counter | neutral
         r["vol_state"] = vstate
         r["vol_src"] = vmeta["seed"]               # ivr | rvr | na (fidelity)
         r["cell"] = cell
-        r["structure"] = f"{structure} ({dc})"
+        r["structure"] = f"{structure} ({dc})"     # expresses the signal's side
         r["ivr"] = None if vmeta["ivr"] is None else round(vmeta["ivr"], 1)
         r["iv"] = pts(vinp.iv)
         r["rv"] = pts(vinp.rv)

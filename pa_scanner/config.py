@@ -65,6 +65,11 @@ class Config:
     iv_back_dte: int = 75             # target DTE for the back expiry
     vol_source: str = "auto"          # "auto" (realized + IV-on-hits) | "tws" (later)
 
+    # Which direction drives the strategy structure:
+    #   "signal" -> express the signal's own side (long->bullish row, short->bearish)
+    #   "regime" -> express the trend regime (legacy; can contradict the signal)
+    structure_from: str = "signal"
+
     # --- report ---
     spark_bars: int = 40
 

@@ -177,8 +177,12 @@ it*:
   | **Neut** | Calendar (D) | Iron Condor (C) | Iron Condor (C) |
   | **Bull** | Call Debit Spread (D) | Put Credit Spread (C) | Put Credit Spread (C) |
 
-  Structure follows the **regime** direction (the backdrop), which can differ
-  from a given signal's side — both are shown so the context is explicit.
+  Structure expresses the **signal's own side** (long -> bullish row, short ->
+  bearish row), so it is always coherent with the trade. The **Regime** column is
+  the separate trend backdrop and carries a **with / counter** flag when the
+  signal runs with or against that trend (a counter-trend fade carries different
+  risk). Set `structure_from = "regime"` in `config.py` for the legacy
+  regime-led behaviour.
 
 ### Two accuracy tiers (same matrix, different vol source)
 - **Free path (cloud / work-computer prep):** no IV history, so IVR isn't

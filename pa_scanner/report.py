@@ -121,7 +121,9 @@ const $ = s => document.querySelector(s);
 const REG={bullish:'Bull',bearish:'Bear',neutral:'Neut'};
 function regCell(r){
   if(!r.regime) return "";
-  return `<span class="${r.regime}">${REG[r.regime]||r.regime}</span> <span class="src">ADX ${r.regime_adx??''}</span>`;
+  const A={with:['\u2197 with','#3fb950'],counter:['\u26a0 counter','#d29922']}, a=A[r.align];
+  const tag=a? ` <span class="src" style="color:${a[1]}">${a[0]}</span>`:'';
+  return `<span class="${r.regime}">${REG[r.regime]||r.regime}</span> <span class="src">ADX ${r.regime_adx??''}</span>${tag}`;
 }
 function volTitle(r){
   const f=[];
@@ -186,7 +188,7 @@ document.querySelectorAll(".bar button[data-f]").forEach(btn=>btn.onclick=()=>{
 $("#q").oninput=e=>{q=e.target.value.trim().toLowerCase(); render();};
 $("#csv").onclick=()=>{
   const cols=["ticker","signal","side","score","last","level","dist","detail","volx","atr",
-              "regime","regime_adx","vol_state","vol_src","cell","structure",
+              "regime","regime_adx","align","vol_state","vol_src","cell","structure",
               "ivr","iv","rv","vrp","term","label"];
   const head=cols.join(",");
   const lines=view.map(r=>cols.map(c=>{

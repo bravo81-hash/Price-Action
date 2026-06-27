@@ -14,7 +14,7 @@ from . import indicators as ind
 from . import data as dl
 from .scanner import prepare_context, SymbolContext, add_regime
 from .rules import ReversalAtWeeklyLevel, TrendPullbackBreakout
-from .regime import VolInputs, direction_read, vol_read, strategy
+from .regime import VolInputs, direction_read, vol_read, strategy, signal_direction, alignment
 from .report import write_report
 
 PASS, FAIL = [], []
@@ -186,10 +186,21 @@ def main():
     check("matrix covers all 9 cells", len({(d, v) for d in ("bearish", "neutral", "bullish")
                                             for v in ("cheap", "fair", "rich")}) == 9)
 
+    print("regime: signal-led structure + alignment (unit)")
+    check("long -> bullish row", signal_direction("long") == "bullish")
+    check("short -> bearish row", signal_direction("short") == "bearish")
+    check("short in bull regime -> counter", alignment("bullish", "short") == "counter")
+    check("long in bull regime -> with", alignment("bullish", "long") == "with")
+    check("neutral regime -> neutral align", alignment("neutral", "short") == "neutral")
+    check("short+cheap -> Long Put (D)", strategy(signal_direction("short"), "cheap")[1:] == ("Long Put", "D"))
+    check("long+cheap -> Call Debit Spread (D)", strategy(signal_direction("long"), "cheap")[1:] == ("Call Debit Spread", "D"))
+
     print("regime: annotate pipeline (end-to-end, no IV)")
     bundle = {"NVDA": (make_s2("long"), dl.to_weekly(make_s2("long"))),
               "XLE": (make_s2("short"), dl.to_weekly(make_s2("short")))}
     erows = [{"ticker": "NVDA", "signal": "S2", "side": "long", "score": 0.8,
+              "last": 100, "atr": 2, "spark": [1, 2]},
+             {"ticker": "NVDA", "signal": "S1", "side": "short", "score": 0.6,   # counter-trend
               "last": 100, "atr": 2, "spark": [1, 2]},
              {"ticker": "XLE", "signal": "S2", "side": "short", "score": 0.7,
               "last": 50, "atr": 1, "spark": [1, 2]}]
@@ -197,6 +208,10 @@ def main():
     check("regime attached", all("regime" in r and "vol_state" in r for r in erows))
     check("structure attached", all(r.get("structure") for r in erows))
     check("NVDA regime bullish", erows[0]["regime"] == "bullish")
+    check("long signal in bull regime -> with", erows[0]["align"] == "with")
+    check("short signal in bull regime -> counter", erows[1]["align"] == "counter")
+    check("short-signal structure is bearish (not bullish)",
+          erows[1]["structure"] in ("Long Put (D)", "Call Credit Spread (C)"))
 
     print(f"\n{len(PASS)} passed, {len(FAIL)} failed")
     if FAIL:

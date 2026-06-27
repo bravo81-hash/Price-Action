@@ -108,3 +108,15 @@ def strategy(direction: str, vol_state: str):
     name, dc = STRATEGY_MATRIX[(direction, vol_state)]
     short = {"bearish": "Bear", "neutral": "Neut", "bullish": "Bull"}[direction]
     return f"{short}x{vol_state.title()}", name, dc
+
+
+def signal_direction(side: str) -> str:
+    """A fired signal is directional: long -> bullish row, short -> bearish row."""
+    return "bullish" if side == "long" else "bearish"
+
+
+def alignment(regime_dir: str, side: str) -> str:
+    """How the signal sits versus the trend regime: 'with' | 'counter' | 'neutral'."""
+    if regime_dir == "neutral":
+        return "neutral"
+    return "with" if signal_direction(side) == regime_dir else "counter"
