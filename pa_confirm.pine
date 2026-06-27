@@ -1,0 +1,115 @@
+//@version=6
+// =====================================================================
+//  PA Confirm — weekly-level reversal + trend-pullback-breakout
+//  Mirrors the pa_scanner Python engine for on-chart confirmation AND
+//  use in the TradingView Pine Screener (Premium).
+//
+//  Run on the DAILY timeframe. For confirmed signals, evaluate after the
+//  daily close (intraday the last bar is still forming).
+//
+//  Pine Screener: add this to Favorites, open Products > Screeners > Pine,
+//  pick your watchlist, set interval = 1D, then filter on the columns
+//  S1_Long / S1_Short / S2_Long / S2_Short ( = 1 means a hit ).
+//
+//  Note: the weekly S/R here uses the latest confirmed weekly pivot high
+//  and low. The Python scanner additionally clusters multiple pivots into
+//  zones, so treat this as a lighter on-chart approximation.
+// =====================================================================
+indicator("PA Confirm", overlay=true)
+
+// ---------------- inputs ----------------
+grpW   = "Weekly trend / levels"
+fastW  = input.int(10, "Weekly EMA fast", group=grpW)
+slowW  = input.int(30, "Weekly EMA slow", group=grpW)
+leftW  = input.int(2,  "Weekly pivot left", group=grpW)
+rightW = input.int(2,  "Weekly pivot right", group=grpW)
+
+grpD       = "Daily signals"
+atrLen     = input.int(14, "ATR length", group=grpD)
+nearAtr    = input.float(1.0, "Near band (x ATR)", step=0.25, group=grpD)
+breakoutN  = input.int(7,  "Breakout window (Donchian)", group=grpD)
+pullbackLk = input.int(10, "Pullback lookback (bars)", group=grpD)
+emaD       = input.int(20, "Daily EMA (pullback ref)", group=grpD)
+
+grpV = "Visuals"
+showLvls = input.bool(true, "Show weekly S/R lines", group=grpV)
+
+// ---------------- weekly data (no repaint) ----------------
+[wphH, wplL] = request.security(syminfo.tickerid, "W",
+     [ta.pivothigh(high, leftW, rightW), ta.pivotlow(low, leftW, rightW)],
+     lookahead=barmerge.lookahead_off)
+
+wEmaF     = request.security(syminfo.tickerid, "W", ta.ema(close, fastW), lookahead=barmerge.lookahead_off)
+wEmaS     = request.security(syminfo.tickerid, "W", ta.ema(close, slowW), lookahead=barmerge.lookahead_off)
+wEmaFprev = request.security(syminfo.tickerid, "W", ta.ema(close, fastW)[1], lookahead=barmerge.lookahead_off)
+
+var float lastRes = na
+var float lastSup = na
+if not na(wphH)
+    lastRes := wphH
+if not na(wplL)
+    lastSup := wplL
+
+upTrend = wEmaF > wEmaS and wEmaF > wEmaFprev
+dnTrend = wEmaF < wEmaS and wEmaF < wEmaFprev
+
+// ---------------- daily primitives ----------------
+atrD  = ta.atr(atrLen)
+ema_d = ta.ema(close, emaD)
+donHi = ta.highest(high, breakoutN)[1]
+donLo = ta.lowest(low, breakoutN)[1]
+
+body  = math.abs(close - open)
+upSh  = high - math.max(open, close)
+loSh  = math.min(open, close) - low
+bullC = close > open
+bearC = open > close
+
+// ---------------- candlestick reversals ----------------
+bullEngulf = bullC and (close[1] < open[1]) and close >= open[1] and open <= close[1]
+bearEngulf = bearC and (close[1] > open[1]) and open >= close[1] and close <= open[1]
+hammer     = loSh >= 2 * body and upSh <= body and body > 0
+shooting   = upSh >= 2 * body and loSh <= body and body > 0
+piercing   = (close[1] < open[1]) and bullC and open < close[1] and close > (open[1] + close[1]) / 2 and close < open[1]
+darkCloud  = (close[1] > open[1]) and bearC and open > close[1] and close < (open[1] + close[1]) / 2 and close > open[1]
+mornStar   = (close[2] < open[2]) and (math.abs(close[1] - open[1]) < math.abs(close[2] - open[2]) * 0.5) and bullC and close > (open[2] + close[2]) / 2
+eveStar    = (close[2] > open[2]) and (math.abs(close[1] - open[1]) < math.abs(close[2] - open[2]) * 0.5) and bearC and close < (open[2] + close[2]) / 2
+tweezBot   = (close[1] < open[1]) and bullC and math.abs(low - low[1])  <= low  * 0.001
+tweezTop   = (close[1] > open[1]) and bearC and math.abs(high - high[1]) <= high * 0.001
+
+bullRev = bullEngulf or hammer or piercing or mornStar or tweezBot
+bearRev = bearEngulf or shooting or darkCloud or eveStar or tweezTop
+
+// ---------------- pullback state ----------------
+pulledUp = ta.barssince(low  <= ema_d) <= pullbackLk and close > ema_d
+pulledDn = ta.barssince(high >= ema_d) <= pullbackLk and close < ema_d
+
+// ---------------- signals ----------------
+band   = atrD * nearAtr
+s1Long  = not na(lastSup) and math.abs(close - lastSup) <= band and close >= lastSup and bullRev
+s1Short = not na(lastRes) and math.abs(close - lastRes) <= band and close <= lastRes and bearRev
+s2Long  = upTrend and pulledUp and close > donHi
+s2Short = dnTrend and pulledDn and close < donLo
+
+// ---------------- visuals ----------------
+plot(showLvls ? lastSup : na, "Wk Support", color=color.new(color.teal, 0), style=plot.style_linebr, linewidth=1)
+plot(showLvls ? lastRes : na, "Wk Resistance", color=color.new(color.maroon, 0), style=plot.style_linebr, linewidth=1)
+
+plotshape(s1Long,  title="S1 Long",  location=location.belowbar, style=shape.triangleup,   color=color.teal,   size=size.small, text="S1")
+plotshape(s1Short, title="S1 Short", location=location.abovebar, style=shape.triangledown, color=color.maroon, size=size.small, text="S1")
+plotshape(s2Long,  title="S2 Long",  location=location.belowbar, style=shape.labelup,      color=color.green,  size=size.small, text="S2")
+plotshape(s2Short, title="S2 Short", location=location.abovebar, style=shape.labeldown,    color=color.red,    size=size.small, text="S2")
+
+// ---------------- Pine Screener columns (read in data window) ----------------
+plot(s1Long  ? 1 : 0, "S1_Long",  display=display.data_window)
+plot(s1Short ? 1 : 0, "S1_Short", display=display.data_window)
+plot(s2Long  ? 1 : 0, "S2_Long",  display=display.data_window)
+plot(s2Short ? 1 : 0, "S2_Short", display=display.data_window)
+plot((s1Long or s1Short or s2Long or s2Short) ? 1 : 0, "AnySignal", display=display.data_window)
+plot(upTrend ? 1 : (dnTrend ? -1 : 0), "WeeklyTrend", display=display.data_window)
+
+// ---------------- alerts ----------------
+alertcondition(s1Long,  "S1 reversal long",  "S1 reversal long at weekly support")
+alertcondition(s1Short, "S1 reversal short", "S1 reversal short at weekly resistance")
+alertcondition(s2Long,  "S2 breakout long",  "S2 pullback breakout (weekly uptrend)")
+alertcondition(s2Short, "S2 breakdown short","S2 breakdown (weekly downtrend)")

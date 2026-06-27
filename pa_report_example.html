@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Price-Action Scan 2026-06-26 23:53</title>
+<style>
+ :root{--bg:#0d1117;--panel:#161b22;--bd:#30363d;--fg:#e6edf3;--mut:#8b949e;
+   --grn:#3fb950;--red:#f85149;--accent:#58a6ff}
+ *{box-sizing:border-box}
+ body{margin:0;background:var(--bg);color:var(--fg);
+   font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+ header{padding:16px 20px;border-bottom:1px solid var(--bd);display:flex;
+   flex-wrap:wrap;align-items:baseline;gap:8px 18px}
+ h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.3px}
+ .meta{color:var(--mut);font-size:12px}
+ .bar{padding:12px 20px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+   border-bottom:1px solid var(--bd)}
+ .bar input{background:var(--panel);border:1px solid var(--bd);color:var(--fg);
+   padding:6px 10px;border-radius:6px;font:inherit;min-width:200px}
+ button{background:var(--panel);border:1px solid var(--bd);color:var(--fg);
+   padding:6px 12px;border-radius:6px;cursor:pointer;font:inherit}
+ button:hover{border-color:var(--accent)}
+ button.on{background:var(--accent);color:#0d1117;border-color:var(--accent)}
+ .spacer{flex:1}
+ table{width:100%;border-collapse:collapse}
+ th,td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--bd);
+   white-space:nowrap}
+ th{position:sticky;top:0;background:var(--panel);cursor:pointer;
+   color:var(--mut);font-weight:600;user-select:none}
+ th:hover{color:var(--fg)}
+ td.num{text-align:right;font-variant-numeric:tabular-nums}
+ tr:hover td{background:#1c2230}
+ .tag{padding:1px 7px;border-radius:4px;font-size:11px;font-weight:600}
+ .s1{background:#1f6feb33;color:#79c0ff} .s2{background:#a371f733;color:#d2a8ff}
+ .long{color:var(--grn)} .short{color:var(--red)}
+ .score{font-weight:600}
+ a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+ .empty{padding:40px 20px;color:var(--mut)}
+</style></head><body>
+<header>
+  <h1>PRICE-ACTION SCAN</h1>
+  <span class="meta">2026-06-26 23:53</span>
+  <span class="meta">universe 183 &middot; liquid 5 &middot; signals 5</span>
+</header>
+<div class="bar">
+  <input id="q" placeholder="filter ticker...">
+  <button data-f="all" class="on">All</button>
+  <button data-f="S1">S1 reversal</button>
+  <button data-f="S2">S2 breakout</button>
+  <button data-f="long">Long</button>
+  <button data-f="short">Short</button>
+  <span class="spacer"></span>
+  <button id="csv">Export CSV</button>
+</div>
+<table id="t"><thead><tr>
+  <th data-k="ticker">Ticker</th>
+  <th data-k="signal">Sig</th>
+  <th data-k="side">Side</th>
+  <th data-k="score" class="num">Score</th>
+  <th data-k="last" class="num">Last</th>
+  <th data-k="level" class="num">Level</th>
+  <th data-k="dist" class="num">Dist/Brk(ATR)</th>
+  <th data-k="detail">Detail</th>
+  <th data-k="volx" class="num">Vol&times;</th>
+  <th data-k="atr" class="num">ATR</th>
+  <th>Trend</th>
+  <th>Chart</th>
+</tr></thead><tbody id="b"></tbody></table>
+<div id="empty" class="empty" style="display:none">No signals matched.</div>
+<script>
+const ROWS = [{"ticker": "NVDA", "signal": "S2", "signal_name": "Trend pullback breakout", "side": "long", "score": 1.0, "last": 151.9, "label": "pullback breakout (wk uptrend)", "atr": 1.83, "level": 149.9, "breakout_atr": 1.09, "volx": 1.9, "pullback_pct": 6.3, "detail": "pullback 6.3%", "dist": 1.09, "spark_svg": "<svg width='110' height='28' viewBox='0 0 110 28'><polyline fill='none' stroke='#3fb950' stroke-width='1.4' points='2.0,26.0 4.7,25.5 7.4,25.0 10.2,24.5 12.9,24.0 15.6,23.5 18.3,23.0 21.0,22.5 23.7,22.0 26.5,21.5 29.2,21.0 31.9,20.5 34.6,19.9 37.3,19.4 40.1,18.9 42.8,18.4 45.5,17.9 48.2,17.4 50.9,16.9 53.6,16.4 56.4,15.9 59.1,15.4 61.8,14.9 64.5,14.4 67.2,13.9 69.9,13.4 72.7,12.9 75.4,12.4 78.1,19.9 80.8,19.4 83.5,18.9 86.3,18.4 89.0,17.9 91.7,17.4 94.4,16.9 97.1,16.4 99.8,15.9 102.6,15.4 105.3,6.8 108.0,2.0'/></svg>"}, {"ticker": "AAPL", "signal": "S2", "signal_name": "Trend pullback breakout", "side": "long", "score": 1.0, "last": 151.9, "label": "pullback breakout (wk uptrend)", "atr": 1.83, "level": 149.9, "breakout_atr": 1.09, "volx": 1.9, "pullback_pct": 6.3, "detail": "pullback 6.3%", "dist": 1.09, "spark_svg": "<svg width='110' height='28' viewBox='0 0 110 28'><polyline fill='none' stroke='#3fb950' stroke-width='1.4' points='2.0,26.0 4.7,25.5 7.4,25.0 10.2,24.5 12.9,24.0 15.6,23.5 18.3,23.0 21.0,22.5 23.7,22.0 26.5,21.5 29.2,21.0 31.9,20.5 34.6,19.9 37.3,19.4 40.1,18.9 42.8,18.4 45.5,17.9 48.2,17.4 50.9,16.9 53.6,16.4 56.4,15.9 59.1,15.4 61.8,14.9 64.5,14.4 67.2,13.9 69.9,13.4 72.7,12.9 75.4,12.4 78.1,19.9 80.8,19.4 83.5,18.9 86.3,18.4 89.0,17.9 91.7,17.4 94.4,16.9 97.1,16.4 99.8,15.9 102.6,15.4 105.3,6.8 108.0,2.0'/></svg>"}, {"ticker": "XLE", "signal": "S2", "signal_name": "Trend pullback breakout", "side": "short", "score": 1.0, "last": 47.85, "label": "breakdown (wk downtrend)", "atr": 1.83, "level": 49.85, "breakout_atr": 1.09, "volx": 1.9, "pullback_pct": 20.4, "detail": "pullback 20.4%", "dist": 1.09, "spark_svg": "<svg width='110' height='28' viewBox='0 0 110 28'><polyline fill='none' stroke='#f85149' stroke-width='1.4' points='2.0,2.0 4.7,2.5 7.4,3.0 10.2,3.5 12.9,4.0 15.6,4.5 18.3,5.0 21.0,5.5 23.7,6.0 26.5,6.5 29.2,7.0 31.9,7.5 34.6,8.1 37.3,8.6 40.1,9.1 42.8,9.6 45.5,10.1 48.2,10.6 50.9,11.1 53.6,11.6 56.4,12.1 59.1,12.6 61.8,13.1 64.5,13.6 67.2,14.1 69.9,14.6 72.7,15.1 75.4,15.6 78.1,8.1 80.8,8.6 83.5,9.1 86.3,9.6 89.0,10.1 91.7,10.6 94.4,11.1 97.1,11.6 99.8,12.1 102.6,12.6 105.3,21.2 108.0,26.0'/></svg>"}, {"ticker": "MSFT", "signal": "S2", "signal_name": "Trend pullback breakout", "side": "long", "score": 1.0, "last": 151.9, "label": "pullback breakout (wk uptrend)", "atr": 1.83, "level": 149.9, "breakout_atr": 1.09, "volx": 1.9, "pullback_pct": 6.3, "detail": "pullback 6.3%", "dist": 1.09, "spark_svg": "<svg width='110' height='28' viewBox='0 0 110 28'><polyline fill='none' stroke='#3fb950' stroke-width='1.4' points='2.0,26.0 4.7,25.5 7.4,25.0 10.2,24.5 12.9,24.0 15.6,23.5 18.3,23.0 21.0,22.5 23.7,22.0 26.5,21.5 29.2,21.0 31.9,20.5 34.6,19.9 37.3,19.4 40.1,18.9 42.8,18.4 45.5,17.9 48.2,17.4 50.9,16.9 53.6,16.4 56.4,15.9 59.1,15.4 61.8,14.9 64.5,14.4 67.2,13.9 69.9,13.4 72.7,12.9 75.4,12.4 78.1,19.9 80.8,19.4 83.5,18.9 86.3,18.4 89.0,17.9 91.7,17.4 94.4,16.9 97.1,16.4 99.8,15.9 102.6,15.4 105.3,6.8 108.0,2.0'/></svg>"}, {"ticker": "GDX", "signal": "S2", "signal_name": "Trend pullback breakout", "side": "short", "score": 1.0, "last": 47.85, "label": "breakdown (wk downtrend)", "atr": 1.83, "level": 49.85, "breakout_atr": 1.09, "volx": 1.9, "pullback_pct": 20.4, "detail": "pullback 20.4%", "dist": 1.09, "spark_svg": "<svg width='110' height='28' viewBox='0 0 110 28'><polyline fill='none' stroke='#f85149' stroke-width='1.4' points='2.0,2.0 4.7,2.5 7.4,3.0 10.2,3.5 12.9,4.0 15.6,4.5 18.3,5.0 21.0,5.5 23.7,6.0 26.5,6.5 29.2,7.0 31.9,7.5 34.6,8.1 37.3,8.6 40.1,9.1 42.8,9.6 45.5,10.1 48.2,10.6 50.9,11.1 53.6,11.6 56.4,12.1 59.1,12.6 61.8,13.1 64.5,13.6 67.2,14.1 69.9,14.6 72.7,15.1 75.4,15.6 78.1,8.1 80.8,8.6 83.5,9.1 86.3,9.6 89.0,10.1 91.7,10.6 94.4,11.1 97.1,11.6 99.8,12.1 102.6,12.6 105.3,21.2 108.0,26.0'/></svg>"}];
+let view = ROWS.slice(), sortK = "score", sortDir = -1, filt = "all", q = "";
+const $ = s => document.querySelector(s);
+function passes(r){
+  if(q && !r.ticker.toLowerCase().includes(q)) return false;
+  if(filt==="all") return true;
+  if(filt==="S1"||filt==="S2") return r.signal===filt;
+  return r.side===filt;
+}
+function render(){
+  view = ROWS.filter(passes).sort((a,b)=>{
+    let x=a[sortK], y=b[sortK];
+    if(typeof x==="number"&&typeof y==="number") return (x-y)*sortDir;
+    return String(x).localeCompare(String(y))*sortDir;
+  });
+  const tb=$("#b"); tb.innerHTML="";
+  for(const r of view){
+    const tr=document.createElement("tr");
+    tr.innerHTML=
+      `<td><b>${r.ticker}</b></td>`+
+      `<td><span class="tag ${r.signal.toLowerCase()}">${r.signal}</span></td>`+
+      `<td class="${r.side}">${r.side}</td>`+
+      `<td class="num score">${r.score.toFixed(3)}</td>`+
+      `<td class="num">${r.last}</td>`+
+      `<td class="num">${r.level??""}</td>`+
+      `<td class="num">${r.dist??""}</td>`+
+      `<td>${r.detail??""}</td>`+
+      `<td class="num">${r.volx??""}</td>`+
+      `<td class="num">${r.atr}</td>`+
+      `<td>${r.spark_svg}</td>`+
+      `<td><a href="https://www.tradingview.com/chart/?symbol=${encodeURIComponent(r.ticker)}" target="_blank">TV</a></td>`;
+    tb.appendChild(tr);
+  }
+  $("#empty").style.display = view.length? "none":"block";
+}
+document.querySelectorAll("th[data-k]").forEach(th=>th.onclick=()=>{
+  const k=th.dataset.k;
+  if(sortK===k) sortDir*=-1; else {sortK=k; sortDir=(k==="ticker"||k==="detail"||k==="side")?1:-1;}
+  render();
+});
+document.querySelectorAll(".bar button[data-f]").forEach(btn=>btn.onclick=()=>{
+  filt=btn.dataset.f;
+  document.querySelectorAll(".bar button[data-f]").forEach(b=>b.classList.remove("on"));
+  btn.classList.add("on"); render();
+});
+$("#q").oninput=e=>{q=e.target.value.trim().toLowerCase(); render();};
+$("#csv").onclick=()=>{
+  const cols=["ticker","signal","side","score","last","level","dist","detail","volx","atr","label"];
+  const head=cols.join(",");
+  const lines=view.map(r=>cols.map(c=>{
+    let v=r[c]; if(v==null) v=""; v=String(v).replace(/"/g,'""');
+    return /[",\n]/.test(v)? '"'+v+'"': v;
+  }).join(","));
+  const blob=new Blob([head+"\n"+lines.join("\n")],{type:"text/csv"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="pa_scan_"+"20260626_2353"+".csv"; a.click();
+};
+render();
+</script></body></html>
