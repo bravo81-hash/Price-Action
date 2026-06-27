@@ -5,7 +5,27 @@ If that fetch fails (offline / page-layout change) a bundled curated large-cap
 subset is used instead so the scanner always runs. Requires network for the
 Wikipedia fetch; the ETF + fallback lists are local.
 """
+import io
+
 import pandas as pd
+
+# Wikipedia 403s the default urllib user-agent; use a browser UA.
+_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                  "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+}
+
+
+def _read_tables(url):
+    """Fetch HTML tables with a real user-agent (Wikipedia blocks the default)."""
+    try:
+        import requests  # bundled with yfinance
+        r = requests.get(url, headers=_HEADERS, timeout=20)
+        r.raise_for_status()
+        return pd.read_html(io.StringIO(r.text))
+    except ImportError:
+        # pandas can pass headers via storage_options on newer versions
+        return pd.read_html(url, storage_options=_HEADERS)
 
 LIQUID_ETFS = [
     "SPY", "QQQ", "IWM", "DIA", "XLF", "XLK", "XLE", "XLV", "XLI", "XLY",
@@ -38,7 +58,7 @@ _NDX_URL = "https://en.wikipedia.org/wiki/Nasdaq-100"
 
 
 def _wiki_symbols(url, candidate_cols):
-    tables = pd.read_html(url)
+    tables = _read_tables(url)
     for t in tables:
         for col in candidate_cols:
             if col in t.columns:
