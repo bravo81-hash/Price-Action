@@ -30,8 +30,11 @@ jobs:
       - name: Install deps
         run: pip install -r requirements.txt
 
-      - name: Run scan -> JSON snapshot
-        run: python -m pa_scanner.cli --web docs --no-html
+      - name: Run scans -> JSON snapshots (US options + ASX/India directional)
+        run: |
+          python -m pa_scanner.cli --market us  --web docs --no-html
+          python -m pa_scanner.cli --market asx --web docs --no-html
+          python -m pa_scanner.cli --market in  --web docs --no-html
 
       - name: Commit snapshot
         run: |

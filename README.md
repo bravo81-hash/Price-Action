@@ -96,6 +96,45 @@ watchlists / alerts. The structure is a starting point; size and strikes are
 chosen in TWS. If `iv`/`term` are blank but `ivr` is present, it is market-data
 entitlement — set `tws_market_data_type` in `config.py` (1 live, 3/4 delayed).
 
+## Markets: US (options) + ASX / India (long-only)
+
+The scanner runs three markets. The **US** tab is the full options playbook
+(vol-state, structure matrix, TWS, last-hour live mode). **ASX** and **India**
+are a different model — long-only directional stock, no options and no short
+selling in the relevant accounts — so they drop all vol/options/TWS machinery
+and instead tag each hit with a single **Action**:
+
+```bash
+python -m pa_scanner.cli --market us            # options (default)
+python -m pa_scanner.cli --market asx --web docs # ASX directional screen
+python -m pa_scanner.cli --market in  --web docs # India directional screen
+```
+
+The same S1/S2/S3 pattern engine is reused; a bearish trigger that would be a
+*short* in the US becomes an **exit/avoid** flag here. Action = weekly trend ×
+trigger direction:
+
+| Weekly trend | Bullish trigger | No trigger (chop) | Bearish trigger |
+|---|---|---|---|
+| **Up**   | BUY (add)            | HOLD  | REDUCE (trim)   |
+| **Flat** | BUY (small)         | WATCH | AVOID           |
+| **Down** | WATCH (risky bounce) | AVOID | **EXIT (get out)** |
+
+Green = BUY/HOLD · amber = REDUCE/AVOID/WATCH · red = **EXIT**. Conservative by
+design: a bullish reversal inside a downtrend is WATCH, not BUY, because these
+names can't be hedged. The **Exit / Trim** filter isolates the get-out names.
+
+This is a **screen**, not position-aware: it flags any constituent firing an
+exit/avoid setup; cross-reference your own holdings (ASX via TWS, India via your
+NSE broker). Universes are curated ~100-name index lists (ASX 50 + mid-caps;
+NIFTY 50 + Next 50); the dollar-volume filter is relaxed since index membership
+guarantees liquidity. yfinance handles `.AX` / `.NS` natively.
+
+**Dashboard:** the US / ASX / India tabs at the top switch markets; each has its
+own JSON snapshot (`latest.json`, `latest_asx.json`, `latest_in.json`) and the
+cloud Action refreshes all three daily. Local buttons:
+`run_scan_asx.bat` / `run_scan_india.bat` (and `.command`).
+
 ## Configuration
 
 All knobs live in `pa_scanner/config.py` (`CFG`). Key ones:

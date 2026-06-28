@@ -95,3 +95,21 @@ class Config:
 
 
 CFG = Config()
+
+
+# --- markets -------------------------------------------------------------
+# US is the options path (vol/structure/TWS). ASX + India are directional
+# (long-only screen, no options): the dollar-volume floor is relaxed because
+# index membership already guarantees liquidity, and turnover is in local ccy.
+MARKETS = {
+    "us":  {"mode": "options",     "suffix": "",    "ccy": "USD", "label": "US",
+            "tv": "",    "min_price": 10.0, "min_dollar_vol": 20_000_000.0},
+    "asx": {"mode": "directional", "suffix": ".AX", "ccy": "AUD", "label": "ASX",
+            "tv": "ASX", "min_price": 0.20, "min_dollar_vol": 0.0},
+    "in":  {"mode": "directional", "suffix": ".NS", "ccy": "INR", "label": "India",
+            "tv": "NSE", "min_price": 5.0,  "min_dollar_vol": 0.0},
+}
+
+
+def market(name="us"):
+    return MARKETS[name]

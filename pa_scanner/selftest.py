@@ -260,6 +260,21 @@ def main():
     check("S3 broke out above", live_status(s3, 115.0, 2.0)[0] == "broke out")
     check("live_status zero-ATR safe", live_status(s2L, 102.0, 0.0)[0] == "triggered")
 
+    # --- directional action matrix (ASX / India long-only) ---
+    from .action import decide
+    check("up + long  -> BUY",    decide("bullish", "long")[0] == "BUY")
+    check("up + short -> REDUCE", decide("bullish", "short")[0] == "REDUCE")
+    check("up + neut  -> HOLD",   decide("bullish", "neutral")[0] == "HOLD")
+    check("flat + long  -> BUY",   decide("neutral", "long")[0] == "BUY")
+    check("flat + short -> AVOID", decide("neutral", "short")[0] == "AVOID")
+    check("flat + neut  -> WATCH", decide("neutral", "neutral")[0] == "WATCH")
+    check("down + short -> EXIT",  decide("bearish", "short")[0] == "EXIT")
+    check("down + long  -> WATCH (risky bounce)",
+          decide("bearish", "long") == ("WATCH", "risky bounce", "warn"))
+    check("down + neut  -> AVOID", decide("bearish", "neutral")[0] == "AVOID")
+    check("EXIT is red tier",   decide("bearish", "short")[2] == "exit")
+    check("BUY is green tier",  decide("bullish", "long")[2] == "pos")
+
     print(f"\n{len(PASS)} passed, {len(FAIL)} failed")
     if FAIL:
         print("FAILED:", ", ".join(FAIL))

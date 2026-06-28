@@ -63,9 +63,11 @@ def to_weekly(daily: pd.DataFrame) -> pd.DataFrame:
     return pd.concat([o, h, l, c, v], axis=1, keys=COLS).dropna()
 
 
-def passes_liquidity(daily: pd.DataFrame) -> bool:
+def passes_liquidity(daily: pd.DataFrame, min_price=None, min_dollar_vol=None) -> bool:
+    mp = CFG.min_price if min_price is None else min_price
+    mdv = CFG.min_avg_dollar_vol if min_dollar_vol is None else min_dollar_vol
     if len(daily) < CFG.dollar_vol_window:
         return False
     last = float(daily["close"].iloc[-1])
     adv = float((daily["close"] * daily["volume"]).tail(CFG.dollar_vol_window).mean())
-    return last >= CFG.min_price and adv >= CFG.min_avg_dollar_vol
+    return last >= mp and adv >= mdv

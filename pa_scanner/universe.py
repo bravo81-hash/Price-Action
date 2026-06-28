@@ -78,6 +78,46 @@ _SP500_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
 _NDX_URL = "https://en.wikipedia.org/wiki/Nasdaq-100"
 
 
+# --- ASX ~100 (ASX 50 + liquid mid-caps). Bare codes; ".AX" added per market.
+# Index membership guarantees liquidity; stale/renamed codes are dropped by the
+# data layer (no Yahoo history -> skipped), so quarterly rebalances are tolerated.
+ASX_100 = [
+    "CBA", "BHP", "CSL", "NAB", "WBC", "ANZ", "MQG", "WES", "GMG", "FMG",
+    "WDS", "TLS", "RIO", "TCL", "WOW", "ALL", "REA", "COL", "STO", "QBE",
+    "RMD", "FPH", "ORG", "SUN", "AMC", "JHX", "COH", "BXB", "SHL", "IAG",
+    "ASX", "S32", "MIN", "PME", "XRO", "CPU", "NST", "WTC", "CAR", "ALD",
+    "MPL", "AIA", "EDV", "TWE", "RHC", "QAN", "SGP", "VCX", "GPT", "MGR",
+    "DXS", "CHC", "LLC", "APA", "AGL", "AZJ", "ORI", "BSL", "NEM", "EVN",
+    "RRL", "PDN", "LYC", "IGO", "SFR", "WHC", "BPT", "JBH", "HVN", "SUL",
+    "FLT", "WEB", "A2M", "DOW", "ANN", "ARB", "BRG", "REH", "SOL", "TNE",
+    "NXT", "CWY", "SEK", "SGM", "MND", "NHF", "MFG", "AMP", "BEN", "BOQ",
+    "NWL", "HUB", "PNI", "CGF", "TPG", "NEC", "NWS", "TLC", "EBO", "CIA",
+    "GOR", "CMM", "PLS", "LTR", "NIC", "SGR", "TAH", "QUB", "ALX", "VNT",
+    "GMD", "PNV", "IEL", "ALQ", "ORA",
+]
+
+# --- India ~100 (NIFTY 50 + Next 50). Bare NSE codes; ".NS" added per market.
+INDIA_100 = [
+    "RELIANCE", "TCS", "HDFCBANK", "ICICIBANK", "INFY", "ITC", "SBIN",
+    "BHARTIARTL", "LT", "HINDUNILVR", "BAJFINANCE", "KOTAKBANK", "AXISBANK",
+    "ASIANPAINT", "MARUTI", "SUNPHARMA", "TITAN", "ULTRACEMCO", "WIPRO",
+    "NESTLEIND", "ONGC", "NTPC", "POWERGRID", "TATAMOTORS", "HCLTECH",
+    "ADANIENT", "ADANIPORTS", "JSWSTEEL", "TATASTEEL", "COALINDIA",
+    "BAJAJFINSV", "HDFCLIFE", "SBILIFE", "DRREDDY", "CIPLA", "GRASIM",
+    "BRITANNIA", "EICHERMOT", "HEROMOTOCO", "APOLLOHOSP", "BPCL", "TATACONSUM",
+    "INDUSINDBK", "HINDALCO", "TECHM", "LTIM", "SHRIRAMFIN", "TRENT", "BEL",
+    "M&M", "BAJAJ-AUTO", "DIVISLAB", "DMART", "PIDILITIND", "GODREJCP",
+    "DABUR", "MARICO", "COLPAL", "BERGEPAINT", "HAVELLS", "SIEMENS", "ABB",
+    "BANKBARODA", "PNB", "CANBK", "IOC", "GAIL", "VEDL", "AMBUJACEM", "ACC",
+    "SHREECEM", "DLF", "GODREJPROP", "ICICIPRULI", "ICICIGI", "HDFCAMC",
+    "SBICARD", "NAUKRI", "BIOCON", "LUPIN", "AUROPHARMA", "TORNTPHARM",
+    "ALKEM", "MUTHOOTFIN", "CHOLAFIN", "PEL", "NMDC", "SAIL", "JINDALSTEL",
+    "TATAPOWER", "ADANIGREEN", "ADANIPOWER", "NHPC", "IRCTC", "PFC", "RECLTD",
+    "HAL", "BHEL", "UNITDSPR", "TVSMOTOR", "ZYDUSLIFE", "POLYCAB", "CGPOWER",
+    "DIXON", "JIOFIN", "IRFC", "BOSCHLTD", "VBL",
+]
+
+
 def _wiki_symbols(url, candidate_cols):
     tables = _read_tables(url)
     for t in tables:
@@ -127,3 +167,18 @@ def build_universe(verbose=True):
     if verbose:
         print(f"[universe] {len(syms)} symbols (S&P 500 via {src})")
     return sorted(syms)
+
+
+def universe_for(market="us", verbose=True):
+    """Return the yfinance-ready symbol list for a market (suffix applied)."""
+    if market == "us":
+        return build_universe(verbose=verbose)
+    if market == "asx":
+        syms = sorted({s + ".AX" for s in ASX_100})
+    elif market == "in":
+        syms = sorted({s + ".NS" for s in INDIA_100})
+    else:
+        raise ValueError(f"unknown market: {market}")
+    if verbose:
+        print(f"[universe] {len(syms)} {market.upper()} symbols (curated index list)")
+    return syms

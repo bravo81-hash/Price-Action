@@ -9,10 +9,11 @@ Examples:
 """
 import argparse
 
-from .config import CFG
+from .config import CFG, MARKETS
 from . import universe as uni
 from . import data as dl
 from .scanner import scan, add_regime
+from .action import add_action
 from .report import write_report
 from .webexport import write_web
 
@@ -33,6 +34,8 @@ def fetch_vix_backwardation():
 
 def main():
     ap = argparse.ArgumentParser(description="Weekly-level / trend-pullback price-action scanner")
+    ap.add_argument("--market", choices=list(MARKETS), default="us",
+                    help="us = options playbook (default); asx / in = long-only directional screen")
     ap.add_argument("--out", default=None, help="self-contained HTML output path")
     ap.add_argument("--web", metavar="DIR", default=None,
                     help="write JSON snapshot for the static dashboard into DIR (e.g. docs)")
@@ -50,47 +53,58 @@ def main():
     ap.add_argument("--tickers", nargs="*", help="scan only these tickers")
     a = ap.parse_args()
 
+    mkt = MARKETS[a.market]
+    directional = mkt["mode"] == "directional"
+
     if a.long_only:
         CFG.allow_short = False
     if a.short_only:
         CFG.allow_long = False
     if a.no_neutral:
         CFG.allow_neutral = False
-    if a.tws:
+    if a.tws and not directional:
         CFG.vol_source = "tws"
-    if a.live:                          # real-time last-hour mode
+    if a.live and not directional:      # real-time last-hour mode (US/options only)
         CFG.vol_source = "tws"
         CFG.tws_market_data_type = 1    # live ticks for prices + greeks
+    live = a.live and not directional
 
-    syms = a.tickers or uni.build_universe()
+    syms = a.tickers or uni.universe_for(a.market)
     if a.limit:
         syms = syms[:a.limit]
-    print(f"[scan] universe = {len(syms)} symbols; downloading daily history...")
+    print(f"[scan] {mkt['label']} universe = {len(syms)} symbols; downloading daily history...")
 
     daily = dl.download_daily(syms)
     print(f"[scan] fetched {len(daily)}; liquidity filter + weekly resample...")
 
     bundle = {}
     for t, d in daily.items():
-        if not dl.passes_liquidity(d):
+        if not dl.passes_liquidity(d, mkt["min_price"], mkt["min_dollar_vol"]):
             continue
         bundle[t] = (d, dl.to_weekly(d))
     print(f"[scan] {len(bundle)} liquid symbols; running rules...")
 
     rows = scan(bundle)
-    print(f"[scan] {len(rows)} signals; classifying regime"
-          + (" + IV enrichment" if (CFG.iv_enrich_hits and not a.no_iv) else "") + "...")
-    vix_bw = fetch_vix_backwardation()
-    add_regime(rows, bundle, iv_enrich=(CFG.iv_enrich_hits and not a.no_iv),
-               vix_backwardation=vix_bw, live=a.live)
+
+    if directional:
+        print(f"[scan] {len(rows)} signals; assigning long-only actions...")
+        add_action(rows, bundle)
+    else:
+        print(f"[scan] {len(rows)} signals; classifying regime"
+              + (" + IV enrichment" if (CFG.iv_enrich_hits and not a.no_iv) else "") + "...")
+        vix_bw = fetch_vix_backwardation()
+        add_regime(rows, bundle, iv_enrich=(CFG.iv_enrich_hits and not a.no_iv),
+                   vix_backwardation=vix_bw, live=live)
 
     if a.web:
-        path = write_web(rows, a.web, scanned=len(bundle), universe=len(syms))
+        path = write_web(rows, a.web, scanned=len(bundle), universe=len(syms),
+                         market=a.market)
         print(f"[scan] -> {path} (+ dated snapshot)")
 
     if not a.no_html:
-        out = a.out or "pa_report.html"
-        write_report(rows, out, scanned=len(bundle), universe=len(syms))
+        out = a.out or ("pa_report.html" if a.market == "us" else f"pa_report_{a.market}.html")
+        write_report(rows, out, scanned=len(bundle), universe=len(syms),
+                     market=a.market)
         print(f"[scan] HTML report -> {out}")
 
 

@@ -12,6 +12,11 @@
    flex-wrap:wrap;align-items:baseline;gap:8px 18px}
  h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.3px}
  .meta{color:var(--mut);font-size:12px}
+ .tabs{padding:10px 20px 0;display:flex;gap:6px;border-bottom:1px solid var(--bd)}
+ .tabs button{background:transparent;border:1px solid var(--bd);border-bottom:none;
+   color:var(--mut);padding:7px 16px;border-radius:7px 7px 0 0;cursor:pointer;font:inherit}
+ .tabs button:hover{color:var(--fg)}
+ .tabs button.on{background:var(--panel);color:var(--fg);border-color:var(--accent)}
  .bar{padding:12px 20px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;
    border-bottom:1px solid var(--bd)}
  .bar input,.bar select{background:var(--panel);border:1px solid var(--bd);color:var(--fg);
@@ -33,6 +38,7 @@
  tr:hover td{background:#1c2230}
  .tag{padding:1px 7px;border-radius:4px;font-size:11px;font-weight:600}
  .s1{background:#1f6feb33;color:#79c0ff} .s2{background:#a371f733;color:#d2a8ff}
+ .s3{background:#8b949e33;color:#c9d1d9}
  .long{color:var(--grn)} .short{color:var(--red)}
  .bullish{color:var(--grn)} .bearish{color:var(--red)} .neutral{color:var(--mut)}
  .src{color:var(--mut);font-size:10px;text-transform:uppercase}
@@ -42,46 +48,76 @@
  .state{padding:40px 20px;color:var(--mut)}
 </style></head><body>
 <header>
-  <h1>PRICE-ACTION SCAN</h1>
+  <h1 id="title">PRICE-ACTION SCAN</h1>
   <span class="meta" id="gen">loading…</span>
   <span class="meta" id="counts"></span>
 </header>
+<div class="tabs" id="tabs">
+  <button data-m="us" class="on">US</button>
+  <button data-m="asx">ASX</button>
+  <button data-m="in">India</button>
+</div>
 <div class="banner" id="banner"></div>
 <div class="bar">
   <select id="snap" title="snapshot"></select>
   <input id="q" placeholder="filter ticker…">
-  <button data-f="all" class="on">All</button>
-  <button data-f="S1">S1 reversal</button>
-  <button data-f="S2">S2 breakout</button>
-  <button data-f="S3">S3 chop</button>
-  <button data-f="long">Long</button>
-  <button data-f="short">Short</button>
-  <button data-f="neutral">Neutral</button>
+  <span id="filters"></span>
   <span class="spacer"></span>
   <button id="reload">↻ Reload</button>
   <button id="csv">Export CSV</button>
 </div>
-<table id="t"><thead><tr>
-  <th data-k="ticker">Ticker</th>
-  <th data-k="signal">Sig</th>
-  <th data-k="side">Side</th>
-  <th data-k="score" class="num">Score</th>
-  <th data-k="last" class="num">Last</th>
-  <th data-k="level" class="num">Level</th>
-  <th data-k="dist" class="num">Dist/Brk(ATR)</th>
-  <th data-k="detail">Detail</th>
-  <th data-k="volx" class="num">Vol&times;</th>
-  <th data-k="atr" class="num">ATR</th>
-  <th data-k="regime">Regime</th>
-  <th data-k="vol_state">Vol</th>
-  <th data-k="structure">Structure</th>
-  <th>Trend</th>
-  <th>Chart</th>
-</tr></thead><tbody id="b"></tbody></table>
+<table id="t"><thead><tr id="head"></tr></thead><tbody id="b"></tbody></table>
 <div id="state" class="state">Loading…</div>
 <script>
 const $ = s => document.querySelector(s);
-let ROWS = [], view = [], sortK = "score", sortDir = -1, filt = "all", q = "";
+const SUF = {us:"", asx:"_asx", in:"_in"};
+const LABEL = {us:"US", asx:"ASX", in:"India"};
+let ROWS=[], view=[], sortK="score", sortDir=-1, filt="all", q="";
+let market="us", MODE="options", TVP="";
+
+const HEAD = {
+  options:[["ticker","Ticker"],["signal","Sig"],["side","Side"],["score","Score num"],
+    ["last","Last num"],["level","Level num"],["dist","Dist/Brk(ATR) num"],["detail","Detail"],
+    ["volx","Vol× num"],["atr","ATR num"],["regime","Regime"],["vol_state","Vol"],
+    ["structure","Structure"],["","Trend"],["","Chart"]],
+  directional:[["ticker","Ticker"],["action","Action"],["trend","Weekly Trend"],["signal","Sig"],
+    ["trigger","Trigger"],["score","Score num"],["last","Last num"],["level","Level num"],
+    ["dist","Dist/Brk(ATR) num"],["detail","Detail"],["","Chart"]]
+};
+const FILTERS = {
+  options:[["all","All"],["S1","S1 reversal"],["S2","S2 breakout"],["S3","S3 chop"],
+    ["long","Long"],["short","Short"],["neutral","Neutral"]],
+  directional:[["all","All"],["buy","Buy"],["hold","Hold"],["exit","Exit / Trim"],
+    ["avoid","Avoid / Watch"],["S1","S1"],["S2","S2"],["S3","S3"]]
+};
+
+function dispSym(t){ return MODE==="options" ? t : t.replace(/\.(AX|NS)$/,''); }
+function tvSym(t){ return TVP ? (TVP+":"+dispSym(t)) : t; }
+
+function buildChrome(){
+  const hr=$("#head"); hr.innerHTML="";
+  HEAD[MODE].forEach(([k,lbl])=>{
+    const parts=lbl.split(" "); const cls=parts.length>1?parts.pop():"";
+    const text=parts.join(" ");
+    const th=document.createElement("th");
+    if(k) th.dataset.k=k; if(cls) th.className=cls;
+    th.textContent=text; hr.appendChild(th);
+  });
+  hr.querySelectorAll("th[data-k]").forEach(th=>th.onclick=()=>{
+    const k=th.dataset.k;
+    if(sortK===k) sortDir*=-1;
+    else {sortK=k; sortDir=(k==="ticker"||k==="detail"||k==="side"||k==="action"||k==="trend"||k==="trigger")?1:-1;}
+    render();
+  });
+  const fb=$("#filters"); fb.innerHTML="";
+  FILTERS[MODE].forEach(([f,lbl],i)=>{
+    const b=document.createElement("button");
+    b.dataset.f=f; b.textContent=lbl; if((filt==="all"&&i===0)||filt===f) b.classList.add("on");
+    b.onclick=()=>{ filt=f; fb.querySelectorAll("button").forEach(x=>x.classList.remove("on"));
+      b.classList.add("on"); render(); };
+    fb.appendChild(b);
+  });
+}
 
 function spark(closes, side){
   if(!closes || closes.length < 2) return "";
@@ -107,19 +143,64 @@ function volTitle(r){
   if(r.term!=null) f.push("term "+(r.term>0?"+":"")+r.term);
   return f.join(" · ") || "no IV data";
 }
-function volCell(r){
-  if(!r.vol_state) return "";
-  return `${r.vol_state} <span class="src">${r.vol_src||''}</span>`;
-}
+function volCell(r){ if(!r.vol_state) return ""; return `${r.vol_state} <span class="src">${r.vol_src||''}</span>`; }
 function structCell(r){
   if(!r.structure) return "";
   const m=String(r.structure).match(/\((\w)\)$/), dc=m?m[1]:'';
   return `<span class="dc-${dc}">${r.structure}</span>`;
 }
+function actionCell(r){
+  const T={pos:'#3fb950',warn:'#d29922',exit:'#f85149'};
+  const c=T[r.action_tier]||'#c9d1d9';
+  const note=r.action_note? ` <span class="src">${r.action_note}</span>`:'';
+  return `<b style="color:${c}">${r.action||''}</b>${note}`;
+}
+function trendCell(r){
+  const T={up:'#3fb950',flat:'#8b949e',down:'#f85149'};
+  return `<span style="color:${T[r.trend]||'#c9d1d9'}">${(r.trend||'').toUpperCase()}</span> <span class="src">ADX ${r.trend_adx??''}</span>`;
+}
+function rowHTML(r){
+  const head=`<td><b>${dispSym(r.ticker)}</b></td>`;
+  const tv=`<td><a href="https://www.tradingview.com/chart/?symbol=${encodeURIComponent(tvSym(r.ticker))}" target="_blank">TV</a></td>`;
+  if(MODE==="directional"){
+    return head+
+      `<td>${actionCell(r)}</td>`+
+      `<td>${trendCell(r)}</td>`+
+      `<td><span class="tag ${String(r.signal).toLowerCase()}">${r.signal}</span></td>`+
+      `<td class="${r.trigger}">${r.trigger||''}</td>`+
+      `<td class="num score">${Number(r.score).toFixed(3)}</td>`+
+      `<td class="num">${r.last??""}</td>`+
+      `<td class="num">${r.level??""}</td>`+
+      `<td class="num">${r.dist??""}</td>`+
+      `<td>${r.detail??""}</td>`+
+      `<td>${spark(r.spark, r.side)}</td>`+tv;
+  }
+  return head+
+    `<td><span class="tag ${String(r.signal).toLowerCase()}">${r.signal}</span></td>`+
+    `<td class="${r.side}">${r.side}</td>`+
+    `<td class="num score">${Number(r.score).toFixed(3)}</td>`+
+    `<td class="num">${r.last??""}</td>`+
+    `<td class="num">${r.level??""}</td>`+
+    `<td class="num">${r.dist??""}</td>`+
+    `<td>${r.detail??""}</td>`+
+    `<td class="num">${r.volx??""}</td>`+
+    `<td class="num">${r.atr??""}</td>`+
+    `<td>${regCell(r)}</td>`+
+    `<td title="${volTitle(r)}">${volCell(r)}</td>`+
+    `<td>${structCell(r)}</td>`+
+    `<td>${spark(r.spark, r.side)}</td>`+tv;
+}
 function passes(r){
-  if(q && !r.ticker.toLowerCase().includes(q)) return false;
+  if(q && !dispSym(r.ticker).toLowerCase().includes(q) && !r.ticker.toLowerCase().includes(q)) return false;
   if(filt==="all") return true;
   if(filt==="S1"||filt==="S2"||filt==="S3") return r.signal===filt;
+  if(MODE==="directional"){
+    if(filt==="buy")   return r.action==="BUY";
+    if(filt==="hold")  return r.action==="HOLD";
+    if(filt==="exit")  return r.action==="EXIT"||r.action==="REDUCE";
+    if(filt==="avoid") return r.action==="AVOID"||r.action==="WATCH";
+    return true;
+  }
   return r.side===filt;
 }
 function render(){
@@ -130,53 +211,39 @@ function render(){
     return String(x).localeCompare(String(y))*sortDir;
   });
   const tb=$("#b"); tb.innerHTML="";
-  for(const r of view){
-    const tr=document.createElement("tr");
-    tr.innerHTML=
-      `<td><b>${r.ticker}</b></td>`+
-      `<td><span class="tag ${String(r.signal).toLowerCase()}">${r.signal}</span></td>`+
-      `<td class="${r.side}">${r.side}</td>`+
-      `<td class="num score">${Number(r.score).toFixed(3)}</td>`+
-      `<td class="num">${r.last??""}</td>`+
-      `<td class="num">${r.level??""}</td>`+
-      `<td class="num">${r.dist??""}</td>`+
-      `<td>${r.detail??""}</td>`+
-      `<td class="num">${r.volx??""}</td>`+
-      `<td class="num">${r.atr??""}</td>`+
-      `<td>${regCell(r)}</td>`+
-      `<td title="${volTitle(r)}">${volCell(r)}</td>`+
-      `<td>${structCell(r)}</td>`+
-      `<td>${spark(r.spark, r.side)}</td>`+
-      `<td><a href="https://www.tradingview.com/chart/?symbol=${encodeURIComponent(r.ticker)}" target="_blank">TV</a></td>`;
-    tb.appendChild(tr);
-  }
+  for(const r of view){ const tr=document.createElement("tr"); tr.innerHTML=rowHTML(r); tb.appendChild(tr); }
   $("#state").style.display = ROWS.length ? "none" : "block";
 }
 function applyData(d){
   ROWS = d.rows || [];
+  MODE = d.mode || "options";
+  TVP  = d.tv || "";
+  $("#title").textContent = "PRICE-ACTION SCAN — " + (d.label || LABEL[market] || "");
   $("#gen").textContent = d.generated ? "updated " + d.generated.replace("T"," ").replace("Z"," UTC") : "";
   $("#counts").textContent = `universe ${d.universe??"?"} · liquid ${d.scanned??"?"} · signals ${d.count??ROWS.length}`;
   const b=$("#banner");
   if(d.note){ b.textContent = d.note; b.style.display="block"; } else { b.style.display="none"; }
+  buildChrome();
   $("#state").textContent = ROWS.length ? "" : "No signals in this snapshot.";
   render();
 }
 async function load(name){
   try{
-    const r = await fetch(`data/${name}.json?t=${Date.now()}`);
+    const r = await fetch(`data/${name}${SUF[market]}.json?t=${Date.now()}`);
     if(!r.ok) throw new Error(r.status);
     applyData(await r.json());
   }catch(e){
-    $("#state").textContent = "No scan data yet — the first run will populate this. ("+e+")";
+    ROWS=[]; render();
+    $("#state").textContent = `No ${LABEL[market]} scan data yet — the next ${market.toUpperCase()} run will populate this. (${e})`;
     $("#state").style.display="block";
   }
 }
 async function initSnaps(){
+  const sel=$("#snap"); sel.innerHTML="";
   try{
-    const r = await fetch(`data/index.json?t=${Date.now()}`);
+    const r = await fetch(`data/index${SUF[market]}.json?t=${Date.now()}`);
     if(!r.ok) return;
     const idx = await r.json();
-    const sel=$("#snap");
     (idx.snapshots||[]).forEach((d,i)=>{
       const o=document.createElement("option");
       o.value=d; o.textContent=(i===0? d+"  (latest)": d); sel.appendChild(o);
@@ -184,22 +251,21 @@ async function initSnaps(){
     sel.onchange=()=>load(sel.value);
   }catch(e){}
 }
-document.querySelectorAll("th[data-k]").forEach(th=>th.onclick=()=>{
-  const k=th.dataset.k;
-  if(sortK===k) sortDir*=-1; else {sortK=k; sortDir=(k==="ticker"||k==="detail"||k==="side")?1:-1;}
-  render();
-});
-document.querySelectorAll(".bar button[data-f]").forEach(btn=>btn.onclick=()=>{
-  filt=btn.dataset.f;
-  document.querySelectorAll(".bar button[data-f]").forEach(b=>b.classList.remove("on"));
-  btn.classList.add("on"); render();
-});
+async function selectMarket(m){
+  market=m;
+  document.querySelectorAll(".tabs button[data-m]").forEach(b=>b.classList.toggle("on", b.dataset.m===m));
+  filt="all";
+  await initSnaps();
+  await load("latest");
+}
+document.querySelectorAll(".tabs button[data-m]").forEach(b=>b.onclick=()=>selectMarket(b.dataset.m));
 $("#q").oninput=e=>{q=e.target.value.trim().toLowerCase(); render();};
 $("#reload").onclick=()=>{ const s=$("#snap"); load(s.value||"latest"); };
 $("#csv").onclick=()=>{
-  const cols=["ticker","signal","side","score","last","level","dist","detail","volx","atr",
-              "regime","regime_adx","align","vol_state","vol_src","cell","structure",
-              "ivr","iv","rv","vrp","term","label"];
+  const cols = MODE==="directional"
+    ? ["ticker","action","action_note","trend","trend_adx","signal","trigger","side","score","last","level","dist","detail","label"]
+    : ["ticker","signal","side","score","last","level","dist","detail","volx","atr",
+       "regime","regime_adx","align","vol_state","vol_src","cell","structure","ivr","iv","rv","vrp","term","label"];
   const head=cols.join(",");
   const lines=view.map(r=>cols.map(c=>{
     let v=r[c]; if(v==null) v=""; v=String(v).replace(/"/g,'""');
@@ -207,7 +273,7 @@ $("#csv").onclick=()=>{
   }).join(","));
   const blob=new Blob([head+"\n"+lines.join("\n")],{type:"text/csv"});
   const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
-  a.download="pa_scan.csv"; a.click();
+  a.download=`pa_scan_${market}.csv`; a.click();
 };
-(async()=>{ await initSnaps(); await load("latest"); })();
+(async()=>{ buildChrome(); await selectMarket("us"); })();
 </script></body></html>
