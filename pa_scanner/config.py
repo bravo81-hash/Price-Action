@@ -85,6 +85,13 @@ class Config:
     tws_greek_wait: float = 2.0      # seconds to let model greeks populate per contract
     tws_snapshot_wait: float = 1.5   # seconds to let a real-time price snapshot populate
 
+    # --- option-chain liquidity check (US/TWS path, on hits) ---
+    # Harvested from the same ATM call+put the vol provider already prices on the
+    # front expiry, so it adds no extra contract requests. A hit is flagged "thin"
+    # if ATM open interest is below the floor or the ATM bid/ask is too wide.
+    opt_oi_min: float = 250.0        # min combined ATM (call+put) open interest
+    opt_spread_max_pct: float = 12.0  # max ATM bid/ask spread as % of mid
+
     # Which direction drives the strategy structure:
     #   "signal" -> express the signal's own side (long->bullish row, short->bearish)
     #   "regime" -> express the trend regime (legacy; can contradict the signal)

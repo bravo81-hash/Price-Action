@@ -62,9 +62,11 @@ _HEAD_OPTIONS = """
   <th data-k="detail">Detail</th>
   <th data-k="volx" class="num">Vol&times;</th>
   <th data-k="atr" class="num">ATR</th>
+  <th data-k="atr_pct" class="num">ATR%</th>
   <th data-k="regime">Regime</th>
   <th data-k="vol_state">Vol</th>
   <th data-k="structure">Structure</th>
+  <th data-k="opt_liq">Opt Liq</th>
   <th>Trend</th>
   <th>Chart</th>"""
 
@@ -76,6 +78,7 @@ _HEAD_DIRECTIONAL = """
   <th data-k="trigger">Trigger</th>
   <th data-k="score" class="num">Score</th>
   <th data-k="last" class="num">Last</th>
+  <th data-k="atr_pct" class="num">ATR%</th>
   <th data-k="level" class="num">Level</th>
   <th data-k="dist" class="num">Dist/Brk(ATR)</th>
   <th data-k="detail">Detail</th>
@@ -196,6 +199,13 @@ function structCell(r){
   const m=String(r.structure).match(/\\((\\w)\\)$/), dc=m?m[1]:'';
   return `<span class="dc-${dc}">${r.structure}</span>`;
 }
+function optLiqCell(r){
+  if(!r.opt_liq) return "";
+  const c = r.opt_liq==="ok" ? "#3fb950" : "#d29922";
+  const oi = r.opt_oi!=null ? "OI "+r.opt_oi : "";
+  const sp = r.opt_spread!=null ? (oi?" \u00b7 ":"")+"sprd "+r.opt_spread+"%" : "";
+  return `<b style="color:${c}">${r.opt_liq.toUpperCase()}</b> <span class="src">${oi}${sp}</span>`;
+}
 /* ---------- directional (ASX/India) cells ---------- */
 function actionCell(r){
   const T={pos:'#3fb950',warn:'#d29922',exit:'#f85149'};
@@ -219,6 +229,7 @@ function rowHTML(r){
       `<td class="${r.trigger}">${r.trigger||''}</td>`+
       `<td class="num score">${r.score.toFixed(3)}</td>`+
       `<td class="num">${r.last}</td>`+
+      `<td class="num">${r.atr_pct??""}</td>`+
       `<td class="num">${r.level??""}</td>`+
       `<td class="num">${r.dist??""}</td>`+
       `<td>${r.detail??""}</td>`+
@@ -235,9 +246,11 @@ function rowHTML(r){
     `<td>${r.detail??""}</td>`+
     `<td class="num">${r.volx??""}</td>`+
     `<td class="num">${r.atr}</td>`+
+    `<td class="num">${r.atr_pct??""}</td>`+
     `<td>${regCell(r)}</td>`+
     `<td title="${volTitle(r)}">${volCell(r)}</td>`+
     `<td>${structCell(r)}</td>`+
+    `<td>${optLiqCell(r)}</td>`+
     `<td>${r.spark_svg}</td>`+tv;
 }
 
@@ -281,9 +294,9 @@ document.querySelectorAll(".bar button[data-f]").forEach(btn=>btn.onclick=()=>{
 $("#q").oninput=e=>{q=e.target.value.trim().toLowerCase(); render();};
 $("#csv").onclick=()=>{
   const cols = MODE==="directional"
-    ? ["ticker","action","action_note","trend","trend_adx","signal","trigger","side","score","last","level","dist","detail","label"]
-    : ["ticker","signal","side","score","last","live","live_status","live_dist","level","dist","detail","volx","atr",
-       "regime","regime_adx","align","vol_state","vol_src","cell","structure","ivr","iv","rv","vrp","term","label"];
+    ? ["ticker","action","action_note","trend","trend_adx","signal","trigger","side","score","last","atr","atr_pct","level","dist","detail","label"]
+    : ["ticker","signal","side","score","last","live","live_status","live_dist","level","dist","detail","volx","atr","atr_pct",
+       "regime","regime_adx","align","vol_state","vol_src","cell","structure","ivr","iv","rv","vrp","term","opt_liq","opt_oi","opt_spread","label"];
   const head=cols.join(",");
   const lines=view.map(r=>cols.map(c=>{
     let v=r[c]; if(v==null) v=""; v=String(v).replace(/"/g,'""');

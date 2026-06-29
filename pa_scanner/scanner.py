@@ -161,13 +161,38 @@ def scan(bundle: dict) -> list:
                         "ticker": t, "signal": rule.code, "signal_name": rule.name,
                         "side": sig.side, "score": round(sig.score, 3),
                         "last": round(ctx.last_close, 2), "label": sig.label,
-                        "atr": round(ctx.atr_last, 2), "spark": ctx.spark,
+                        "atr": round(ctx.atr_last, 2),
+                        "atr_pct": (round(ctx.atr_last / ctx.last_close * 100, 2)
+                                    if ctx.last_close else None),
+                        "spark": ctx.spark,
                         **sig.meta,
                     })
         except Exception:
             continue
     rows.sort(key=lambda r: r["score"], reverse=True)
     return rows
+
+
+def option_liquidity(oi_call, oi_put, spread_pct, oi_min=None, spread_max=None):
+    """Classify ATM option-chain liquidity for a hit -> (flag, oi_total, spread_pct).
+
+    flag is 'ok' | 'thin' | None (None = no chain data, e.g. non-TWS path).
+    Thin = combined ATM open interest below the floor OR ATM spread too wide.
+    Judged on whichever signals are present (OI-only or spread-only both work).
+    """
+    oi_min = CFG.opt_oi_min if oi_min is None else oi_min
+    spread_max = CFG.opt_spread_max_pct if spread_max is None else spread_max
+    oi = None
+    if oi_call is not None or oi_put is not None:
+        oi = (oi_call or 0) + (oi_put or 0)
+    if oi is None and spread_pct is None:
+        return None, None, None
+    spread_ok = (spread_pct is None) or (spread_pct <= spread_max)
+    if oi is None:
+        flag = "ok" if spread_ok else "thin"
+    else:
+        flag = "ok" if (oi >= oi_min and spread_ok) else "thin"
+    return flag, oi, spread_pct
 
 
 def live_status(row, live_price, atr):
@@ -243,6 +268,12 @@ def add_regime(rows, bundle, iv_enrich=None, vix_backwardation=None, live=False)
             r["rv"] = pts(vinp.rv)
             r["vrp"] = pts(vmeta["vrp"])               # vol points (iv - rv)
             r["term"] = pts(vmeta["term_slope"])       # vol points (front - back)
+
+            oliq, ooi, ospread = option_liquidity(
+                vinp.oi_call, vinp.oi_put, vinp.opt_spread_pct)
+            r["opt_liq"] = oliq                        # ok | thin | None (non-TWS path)
+            r["opt_oi"] = None if ooi is None else int(ooi)
+            r["opt_spread"] = ospread                  # ATM bid/ask spread, % of mid
 
             if is_live:                                 # real-time refresh (last hour)
                 if t not in live_cache:

@@ -149,6 +149,17 @@ All knobs live in `pa_scanner/config.py` (`CFG`). Key ones:
 | `s2_pullback_lookback` | `10` | days to find the counter-trend dip |
 | `s2_require_structure` | `False` | also require weekly HH/HL (else scored) |
 | `s2_vol_mult` | `1.2` | volume-expansion bonus threshold |
+| `opt_oi_min` | `250` | min combined ATM (call+put) OI before a US hit is flagged thin |
+| `opt_spread_max_pct` | `12.0` | max ATM bid/ask spread (% of mid) before thin |
+
+**ATR%** (`atr ÷ last × 100`) is a sortable column on every tab — currency-neutral,
+so it ranks risk across US/ASX/India and converts straight to a % stop width.
+
+**Opt Liq** (US tab, TWS path only) flags each hit `OK`/`thin` from the ATM
+open interest and bid/ask spread on the front expiry. It is harvested from the
+same ATM call/put the vol provider already prices, so it costs no extra option
+requests. Blank on the yfinance/realized path (no chain data). Spread reads most
+reliably in-hours; after the close the OI component (prior settle) carries it.
 
 ## Adding a pattern later
 

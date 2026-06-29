@@ -44,6 +44,10 @@ class VolInputs:
     term_slope: Optional[float] = None    # front_iv - back_iv (decimal; >0 = backwardation)
     backwardation: Optional[bool] = None
     source: str = "na"                    # provider tag: "rv" | "yf" | "tws"
+    # option-chain liquidity (TWS path; harvested from the front-expiry ATM call/put)
+    oi_call: Optional[float] = None
+    oi_put: Optional[float] = None
+    opt_spread_pct: Optional[float] = None  # ATM bid/ask spread as % of mid
 
 
 def _nan(x) -> bool:

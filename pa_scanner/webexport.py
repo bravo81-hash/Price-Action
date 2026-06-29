@@ -17,10 +17,11 @@ from .config import MARKETS
 
 def _row(r: dict) -> dict:
     d = {k: r.get(k) for k in
-         ("ticker", "signal", "signal_name", "side", "score", "last", "atr", "label", "level",
+         ("ticker", "signal", "signal_name", "side", "score", "last", "atr", "atr_pct", "label", "level",
           # options (US) fields
           "regime", "regime_adx", "align", "vol_state", "vol_src", "cell", "structure",
           "ivr", "iv", "rv", "vrp", "term", "live", "live_status", "live_dist",
+          "opt_liq", "opt_oi", "opt_spread",
           # directional (ASX / India) fields
           "trend", "trend_adx", "trigger", "action", "action_note", "action_tier")}
     if r.get("signal") == "S1":

@@ -17,6 +17,32 @@ from . import indicators as ind
 from .regime import VolInputs
 
 
+def _pos(*vals):
+    """First strictly-positive, non-NaN value among args, else None."""
+    for v in vals:
+        if v is None:
+            continue
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            continue
+        if f > 0 and not math.isnan(f):
+            return f
+    return None
+
+
+def _spread_pct(bid, ask):
+    """ATM bid/ask spread as % of mid; None if no valid two-sided quote."""
+    try:
+        b, a = float(bid), float(ask)
+    except (TypeError, ValueError):
+        return None
+    if math.isnan(b) or math.isnan(a) or not (b > 0 and a > 0 and a >= b):
+        return None
+    mid = (a + b) / 2.0
+    return round(100.0 * (a - b) / mid, 1) if mid > 0 else None
+
+
 def _rv_and_rank(daily):
     rv_series = ind.realized_vol(daily)
     last = rv_series.iloc[-1]
@@ -140,12 +166,19 @@ class TWSVolProvider:
         except Exception:
             return None
 
-    def _atm_iv(self, symbol, expiry, spot):
+    def _atm_iv(self, symbol, expiry, spot, collect_liq=False):
         """Mean model IV of the ATM call & put that actually exist for this expiry.
         Strikes are enumerated per-expiry via reqContractDetails (the union list
-        from reqSecDefOptParams contains strikes that don't trade every expiry)."""
+        from reqSecDefOptParams contains strikes that don't trade every expiry).
+
+        When collect_liq is set (front expiry only), also harvest open interest
+        and the bid/ask spread from the very same ATM contracts -> returns
+        (iv, liq_dict). Otherwise returns iv (scalar) as before.
+        """
         from ib_async import Option
         ivs = []
+        liq = {"oi_call": None, "oi_put": None, "spread_pct": None}
+        spreads = []
         for right in ("C", "P"):
             try:
                 cds = self.ib.reqContractDetails(Option(symbol, expiry, 0, right, "SMART"))
@@ -155,25 +188,38 @@ class TWSVolProvider:
                 continue
             con = min(cds, key=lambda cd: abs(cd.contract.strike - spot)).contract
             try:
-                tk = self.ib.reqMktData(con, "", False, False)
+                ticks = "100,101" if collect_liq else ""   # 101 = option open interest
+                tk = self.ib.reqMktData(con, ticks, False, False)
                 self.ib.sleep(self._greek_wait)
                 mg = tk.modelGreeks
                 if mg and mg.impliedVol and mg.impliedVol > 0:
                     ivs.append(float(mg.impliedVol))
+                if collect_liq:
+                    oi = _pos(getattr(tk, "openInterest", None),
+                              getattr(tk, "callOpenInterest" if right == "C" else "putOpenInterest", None))
+                    liq["oi_call" if right == "C" else "oi_put"] = oi
+                    sp = _spread_pct(getattr(tk, "bid", None), getattr(tk, "ask", None))
+                    if sp is not None:
+                        spreads.append(sp)
                 self.ib.cancelMktData(con)
             except Exception:
                 continue
-        return sum(ivs) / len(ivs) if ivs else None
+        iv = sum(ivs) / len(ivs) if ivs else None
+        if collect_liq:
+            if spreads:
+                liq["spread_pct"] = round(sum(spreads) / len(spreads), 1)
+            return iv, liq
+        return iv
 
     def _chain_atm(self, stk, spot):
         import datetime as dt
         try:
             params = self.ib.reqSecDefOptParams(stk.symbol, "", stk.secType, stk.conId)
         except Exception:
-            return None, None
+            return None, None, None
         p = next((x for x in params if x.exchange == "SMART"), params[0] if params else None)
         if p is None or not p.expirations:
-            return None, None
+            return None, None, None
         today = dt.date.today()
 
         def dte(e):
@@ -181,12 +227,12 @@ class TWSVolProvider:
 
         valid = [(e, dte(e)) for e in sorted(p.expirations) if dte(e) >= 1]
         if not valid:
-            return None, None
+            return None, None, None
         front = min(valid, key=lambda z: abs(z[1] - CFG.iv_front_dte))[0]
         back = min(valid, key=lambda z: abs(z[1] - CFG.iv_back_dte))[0]
-        iv_f = self._atm_iv(stk.symbol, front, spot)
+        iv_f, liq = self._atm_iv(stk.symbol, front, spot, collect_liq=True)
         iv_b = self._atm_iv(stk.symbol, back, spot) if back != front else None
-        return iv_f, iv_b
+        return iv_f, iv_b, liq
 
     def inputs_for(self, ticker, daily) -> VolInputs:
         from ib_async import Stock
@@ -210,13 +256,16 @@ class TWSVolProvider:
                 ivr = 100.0 * (ivs[-1] - lo) / (hi - lo) if hi > lo else None
             iv_hist = ivs[-1] if ivs else None
 
-            iv_f, iv_b = self._chain_atm(stk, spot)
+            iv_f, iv_b, liq = self._chain_atm(stk, spot)
+            liq = liq or {}
             iv = iv_f if iv_f is not None else iv_hist
             term = (iv_f - iv_b) if (iv_f is not None and iv_b is not None) else None
             bw = (iv_f > iv_b) if (iv_f is not None and iv_b is not None) else self.vix_bw
             vrp = (iv - rv) if (iv is not None and rv is not None) else None
             return VolInputs(rv=rv, rv_rank=rank, iv=iv, ivr=ivr, vrp=vrp,
-                             term_slope=term, backwardation=bw, source="tws")
+                             term_slope=term, backwardation=bw, source="tws",
+                             oi_call=liq.get("oi_call"), oi_put=liq.get("oi_put"),
+                             opt_spread_pct=liq.get("spread_pct"))
         except Exception:
             return fallback
 

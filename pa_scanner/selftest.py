@@ -275,6 +275,30 @@ def main():
     check("EXIT is red tier",   decide("bearish", "short")[2] == "exit")
     check("BUY is green tier",  decide("bullish", "long")[2] == "pos")
 
+    # --- ATR% column ---
+    from .scanner import scan, option_liquidity
+    b = {"AAA": (make_s2("long"), dl.to_weekly(make_s2("long")))}
+    arows = scan(b)
+    check("scan emits atr_pct", bool(arows) and "atr_pct" in arows[0])
+    check("atr_pct is positive", bool(arows) and arows[0]["atr_pct"] > 0)
+
+    # --- option-chain liquidity flag (pure) ---
+    check("opt_liq none w/o data", option_liquidity(None, None, None)[0] is None)
+    check("opt_liq ok deep+tight",
+          option_liquidity(300, 300, 5, oi_min=250, spread_max=12)[0] == "ok")
+    check("opt_liq thin low OI",
+          option_liquidity(50, 50, 5, oi_min=250, spread_max=12)[0] == "thin")
+    check("opt_liq thin wide spread",
+          option_liquidity(300, 300, 20, oi_min=250, spread_max=12)[0] == "thin")
+    check("opt_liq spread-only ok",
+          option_liquidity(None, None, 5, oi_min=250, spread_max=12)[0] == "ok")
+    check("opt_liq spread-only thin",
+          option_liquidity(None, None, 20, oi_min=250, spread_max=12)[0] == "thin")
+    check("opt_liq OI-only ok (no quote)",
+          option_liquidity(300, 300, None, oi_min=250, spread_max=12)[0] == "ok")
+    check("opt_liq returns combined OI",
+          option_liquidity(300, 300, 5, oi_min=250, spread_max=12)[1] == 600)
+
     print(f"\n{len(PASS)} passed, {len(FAIL)} failed")
     if FAIL:
         print("FAILED:", ", ".join(FAIL))
