@@ -17,7 +17,8 @@ from .config import MARKETS
 
 def _row(r: dict) -> dict:
     d = {k: r.get(k) for k in
-         ("ticker", "signal", "signal_name", "side", "score", "last", "atr", "atr_pct", "label", "level",
+         ("ticker", "signal", "signal_name", "side", "score", "rank", "last", "atr", "atr_pct",
+          "rs", "rs_pct", "age", "ern", "label", "level",
           # options (US) fields
           "regime", "regime_adx", "align", "vol_state", "vol_src", "cell", "structure",
           "ivr", "iv", "rv", "vrp", "term", "live", "live_status", "live_dist",
@@ -40,7 +41,7 @@ def _row(r: dict) -> dict:
     return d
 
 
-def write_web(rows, out_dir="docs", scanned=0, universe=0, keep=60, note=None, market="us"):
+def write_web(rows, out_dir="docs", scanned=0, universe=0, keep=60, note=None, market="us", bench=None):
     mkt = MARKETS[market]
     suffix = "" if market == "us" else f"_{market}"
     data_dir = os.path.join(out_dir, "data")
@@ -61,6 +62,8 @@ def write_web(rows, out_dir="docs", scanned=0, universe=0, keep=60, note=None, m
     }
     if note:
         payload["note"] = note
+    if bench:
+        payload["bench"] = bench
 
     date = now.strftime("%Y-%m-%d")
     blob = json.dumps(payload, separators=(",", ":"))

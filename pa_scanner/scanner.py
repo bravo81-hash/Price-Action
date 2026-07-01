@@ -4,7 +4,9 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from .config import CFG
+from typing import Optional
+
+from .config import CFG, MARKETS
 from . import indicators as ind
 from . import candles as cnd
 from .rules import RULES
@@ -43,6 +45,13 @@ class SymbolContext:
     range_width_pct: float = 0.0
     ema_sep_pct: float = 0.0
     range_crosses: int = 0
+    # --- quality context ---
+    last_low: float = 0.0
+    last_high: float = 0.0
+    prior_med: float = 0.0          # median of the prior N closes (approach direction)
+    s2_age_up: Optional[int] = None   # bars since the last close-above-donchian cross
+    s2_age_dn: Optional[int] = None
+    s3_edge_closes: int = 0         # of the last 3 closes, how many sit at a range boundary
 
 
 def _clip01(x):
@@ -90,9 +99,16 @@ def prepare_context(ticker, daily, weekly):
     levels = [p for _, p in ph] + [p for _, p in pl]
     zones = ind.cluster(levels, CFG.s1_cluster_atr * watr) if watr > 0 else []
 
-    # daily candlestick patterns on the latest bar
+    # daily candlestick patterns on the latest bar; single-bar patterns on a
+    # sub-half-ATR bar are noise -> dropped (engulfing/star keep multi-bar structure)
     bull = cnd.last_patterns(d, cnd.BULLISH)
     bear = cnd.last_patterns(d, cnd.BEARISH)
+    bar_range = float(last["high"] - last["low"])
+    if atr_last > 0 and bar_range < CFG.s1_min_bar_range_atr * atr_last:
+        for k in ("hammer", "tweezer_bottom"):
+            bull.pop(k, None)
+        for k in ("shooting_star", "tweezer_top"):
+            bear.pop(k, None)
 
     # pullback (up): recent dip to/below ema20, now recovered above it
     look = CFG.s2_pullback_lookback
@@ -115,6 +131,26 @@ def prepare_context(ticker, daily, weekly):
     dh = float(don_hi.iloc[-1]) if not np.isnan(don_hi.iloc[-1]) else float(last["close"])
     dlo = float(don_lo.iloc[-1]) if not np.isnan(don_lo.iloc[-1]) else float(last["close"])
 
+    # breakout freshness: bars since the close last crossed the donchian band
+    c = d["close"]
+    ok_hi = don_hi.notna() & don_hi.shift(1).notna()
+    ok_lo = don_lo.notna() & don_lo.shift(1).notna()
+    up_x = ((c > don_hi) & (c.shift(1) <= don_hi.shift(1)) & ok_hi).to_numpy()
+    dn_x = ((c < don_lo) & (c.shift(1) >= don_lo.shift(1)) & ok_lo).to_numpy()
+    iu = np.where(up_x)[0]
+    idn = np.where(dn_x)[0]
+    age_up = int(len(d) - 1 - iu[-1]) if len(iu) else None
+    age_dn = int(len(d) - 1 - idn[-1]) if len(idn) else None
+    if age_up is not None and age_up > 15:
+        age_up = None
+    if age_dn is not None and age_dn > 15:
+        age_dn = None
+
+    # approach direction for S1: where price lived over the prior N closes
+    ab = CFG.s1_approach_bars
+    prior = c.iloc[-(ab + 1):-1]
+    prior_med = float(prior.median()) if len(prior) else float(last["close"])
+
     # S3 range / chop metrics
     price = float(last["close"])
     adx_s, _, _ = ind.adx(d)
@@ -129,11 +165,15 @@ def prepare_context(ticker, daily, weekly):
     mid = (r_hi + r_lo) / 2.0
     above = rng["close"] > mid
     range_crosses = int((above != above.shift(1)).iloc[1:].sum())
+    edge_band = CFG.s3_edge_frac * (r_hi - r_lo)
+    last3 = d["close"].iloc[-3:]
+    s3_edge_closes = int(((last3 > r_hi - edge_band) | (last3 < r_lo + edge_band)).sum())
 
     return SymbolContext(
         ticker=ticker, last_close=price, atr_last=atr_last,
         vol_last=float(last["volume"]),
-        vol_avg=float(d["volume"].tail(CFG.s2_vol_window).mean()),
+        vol_avg=float(d["volume"].iloc[-(CFG.s2_vol_window + 1):-1].mean()
+                      if len(d) > CFG.s2_vol_window else d["volume"].mean()),
         zones=zones, bull_patterns=bull, bear_patterns=bear,
         wk_uptrend=up, wk_downtrend=dn, wema_fast=wf, wema_slow=ws,
         pullback_up=pullback_up, pullback_dn=pullback_dn,
@@ -143,6 +183,9 @@ def prepare_context(ticker, daily, weekly):
         spark=[round(x, 4) for x in d["close"].tail(CFG.spark_bars).tolist()],
         adx_last=adx_last, range_hi=r_hi, range_lo=r_lo, range_pos=range_pos,
         range_width_pct=range_width_pct, ema_sep_pct=ema_sep_pct, range_crosses=range_crosses,
+        last_low=float(last["low"]), last_high=float(last["high"]),
+        prior_med=prior_med, s2_age_up=age_up, s2_age_dn=age_dn,
+        s3_edge_closes=s3_edge_closes,
     )
 
 
@@ -170,6 +213,92 @@ def scan(bundle: dict) -> list:
         except Exception:
             continue
     rows.sort(key=lambda r: r["score"], reverse=True)
+    return rows
+
+
+def add_market_context(rows, bundle, bench_daily=None, market="us"):
+    """Relative strength + index-regime awareness. Mutates row scores in place.
+
+    RS = ticker's rs_window return minus the market benchmark's (plain return if
+    the benchmark is unavailable), ranked as a percentile across ALL liquid
+    scanned symbols. Longs get up to +/- rs_adj_max from their RS percentile;
+    shorts the inverse (weak names make better exits/shorts). Signals fighting
+    the benchmark's own direction_read take a flat index_penalty.
+    Returns {symbol, bias, adx} for the benchmark, or None.
+    """
+    import bisect
+    w = CFG.rs_window
+    bench_ret, binfo = None, None
+    if bench_daily is not None and len(bench_daily) > w:
+        bc = bench_daily["close"]
+        bench_ret = float(bc.iloc[-1] / bc.iloc[-1 - w] - 1)
+        bias, bm = rg.direction_read(bench_daily)
+        binfo = {"symbol": MARKETS[market]["bench"], "bias": bias,
+                 "adx": round(bm["adx"], 1)}
+
+    rs_map = {}
+    for t, (d, _) in bundle.items():
+        cl = d["close"]
+        if len(cl) > w:
+            ret = float(cl.iloc[-1] / cl.iloc[-1 - w] - 1)
+            rs_map[t] = ret - bench_ret if bench_ret is not None else ret
+    vals = sorted(rs_map.values())
+
+    def pct(x):
+        if len(vals) < 2:
+            return 100 if vals else None
+        return int(round(100 * bisect.bisect_left(vals, x) / (len(vals) - 1)))
+
+    n_rs = 0
+    for r in rows:
+        x = rs_map.get(r["ticker"])
+        if x is None:
+            r["rs"], r["rs_pct"] = None, None
+            continue
+        p = pct(x)
+        r["rs"], r["rs_pct"] = round(x * 100, 1), p
+        n_rs += 1
+        adj = 0.0
+        if r["side"] == "long":
+            adj += CFG.rs_adj_max * (p - 50) / 50
+        elif r["side"] == "short":
+            adj += CFG.rs_adj_max * (50 - p) / 50
+        if binfo:
+            if r["side"] == "long" and binfo["bias"] == "bearish":
+                adj -= CFG.index_penalty
+            elif r["side"] == "short" and binfo["bias"] == "bullish":
+                adj -= CFG.index_penalty
+        if adj:
+            r["score"] = round(_clip01_f(r["score"] + adj), 3)
+    if binfo:
+        print(f"[context] bench {binfo['symbol']}: {binfo['bias']} "
+              f"(ADX {binfo['adx']}); RS on {n_rs}/{len(rows)} hits")
+    else:
+        print(f"[context] benchmark unavailable; RS is absolute return "
+              f"({n_rs}/{len(rows)} hits)")
+    return binfo
+
+
+def _clip01_f(x):
+    return float(max(0.0, min(1.0, x)))
+
+
+def compute_rank(rows):
+    """rank = percentile of a hit's score within its own rule (0..100).
+    Makes S1/S2/S3 hits comparable in one sorted list."""
+    by_sig = {}
+    for r in rows:
+        by_sig.setdefault(r["signal"], []).append(r["score"])
+    for k in by_sig:
+        by_sig[k].sort()
+    for r in rows:
+        vals = by_sig[r["signal"]]
+        if len(vals) < 2:
+            r["rank"] = 100
+            continue
+        below = sum(1 for v in vals if v < r["score"])
+        eq_others = sum(1 for v in vals if v == r["score"]) - 1
+        r["rank"] = int(round(100 * (below + 0.5 * eq_others) / (len(vals) - 1)))
     return rows
 
 
@@ -260,6 +389,11 @@ def add_regime(rows, bundle, iv_enrich=None, vix_backwardation=None, live=False)
             r["regime_adx"] = round(dmeta["adx"], 1)
             r["align"] = rg.alignment(direction, r["side"])   # with | counter | neutral
             r["vol_state"] = vstate
+            if r["signal"] == "S3":        # condor quality tracks vol richness
+                if vstate == "rich":
+                    r["score"] = round(_clip01_f(r["score"] + CFG.s3_vol_adj), 3)
+                elif vstate == "cheap":
+                    r["score"] = round(_clip01_f(r["score"] - CFG.s3_vol_adj), 3)
             r["vol_src"] = vmeta["seed"]               # ivr | rvr | na (fidelity)
             r["cell"] = cell
             r["structure"] = f"{structure} ({dc})"     # expresses the signal's side

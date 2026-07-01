@@ -80,14 +80,14 @@ BULLISH = {
     "morning_star": (morning_star, 1.0),
     "piercing": (piercing, 0.8),
     "hammer": (hammer, 0.7),
-    "tweezer_bottom": (tweezer_bottom, 0.7),
+    "tweezer_bottom": (tweezer_bottom, 0.5),
 }
 BEARISH = {
     "bearish_engulfing": (bearish_engulfing, 1.0),
     "evening_star": (evening_star, 1.0),
     "dark_cloud": (dark_cloud, 0.8),
     "shooting_star": (shooting_star, 0.7),
-    "tweezer_top": (tweezer_top, 0.7),
+    "tweezer_top": (tweezer_top, 0.5),
 }
 
 

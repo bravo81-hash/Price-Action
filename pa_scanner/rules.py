@@ -31,6 +31,15 @@ def _clip01(x: float) -> float:
 
 @register
 class ReversalAtWeeklyLevel:
+    """Reversal candle testing a weekly S/R zone.
+
+    A zone only counts as SUPPORT if price approached it from above (median of
+    the prior N closes sits above the zone) and the bar's LOW actually reached
+    into it; mirror for RESISTANCE. Without the approach check, a rally poking
+    above overhead supply reads as "long @ support" - exactly backwards.
+    Reversals aligned with the weekly trend score up; knife-catches against it
+    score down.
+    """
     code = "S1"
     name = "Reversal at weekly level"
 
@@ -40,29 +49,61 @@ class ReversalAtWeeklyLevel:
         if atr <= 0 or not ctx.zones:
             return Signal(False, None, 0.0, "")
         band = CFG.s1_near_atr * atr
+        wick = CFG.s1_wick_frac * band
+        hold = CFG.s1_close_frac * band
         zp, zc = min(ctx.zones, key=lambda z: abs(price - z[0]))
-        dist = abs(price - zp)
-        if dist > band:
-            return Signal(False, None, 0.0, "")
-        prox = _clip01(1 - dist / band)
         zstr = _clip01(zc / 4.0)
-        if zp <= price and ctx.bull_patterns and CFG.allow_long:
+
+        # ---- support test (long): approached from above, low tagged the zone,
+        #      close held at/above it and hasn't already run away upward
+        if (CFG.allow_long and ctx.bull_patterns
+                and ctx.prior_med > zp
+                and ctx.last_low <= zp + wick
+                and zp - hold <= price <= zp + band):
             pname = max(ctx.bull_patterns, key=ctx.bull_patterns.get)
-            score = _clip01(0.5 * ctx.bull_patterns[pname] + 0.3 * prox + 0.2 * zstr)
-            return Signal(True, "long", score, f"{pname} @ wk support {zp:.2f}",
-                          {"level": round(zp, 2), "dist_atr": round(dist / atr, 2),
+            touch = _clip01(1 - abs(ctx.last_low - zp) / wick) if wick > 0 else 0.0
+            score = 0.5 * ctx.bull_patterns[pname] + 0.3 * touch + 0.2 * zstr
+            if ctx.wk_uptrend:
+                score += CFG.s1_with_trend_bonus
+            elif ctx.wk_downtrend:
+                score -= CFG.s1_counter_trend_penalty
+            return Signal(True, "long", _clip01(score),
+                          f"{pname} @ wk support {zp:.2f}",
+                          {"level": round(zp, 2),
+                           "dist_atr": round(abs(price - zp) / atr, 2),
                            "pattern": pname, "zone_hits": zc})
-        if zp > price and ctx.bear_patterns and CFG.allow_short:
+
+        # ---- resistance test (short): approached from below, high tagged the
+        #      zone, close held at/below it and hasn't already broken down
+        if (CFG.allow_short and ctx.bear_patterns
+                and ctx.prior_med < zp
+                and ctx.last_high >= zp - wick
+                and zp - band <= price <= zp + hold):
             pname = max(ctx.bear_patterns, key=ctx.bear_patterns.get)
-            score = _clip01(0.5 * ctx.bear_patterns[pname] + 0.3 * prox + 0.2 * zstr)
-            return Signal(True, "short", score, f"{pname} @ wk resistance {zp:.2f}",
-                          {"level": round(zp, 2), "dist_atr": round(dist / atr, 2),
+            touch = _clip01(1 - abs(ctx.last_high - zp) / wick) if wick > 0 else 0.0
+            score = 0.5 * ctx.bear_patterns[pname] + 0.3 * touch + 0.2 * zstr
+            if ctx.wk_downtrend:
+                score += CFG.s1_with_trend_bonus
+            elif ctx.wk_uptrend:
+                score -= CFG.s1_counter_trend_penalty
+            return Signal(True, "short", _clip01(score),
+                          f"{pname} @ wk resistance {zp:.2f}",
+                          {"level": round(zp, 2),
+                           "dist_atr": round(abs(price - zp) / atr, 2),
                            "pattern": pname, "zone_hits": zc})
+
         return Signal(False, None, 0.0, "")
 
 
 @register
 class TrendPullbackBreakout:
+    """Weekly-trend pullback resolving through the prior-7 Donchian band.
+
+    Only FRESH breakouts list (cross within s2_max_age bars) and chasing is
+    rejected: past s2_max_ext_atr beyond the trigger there is no hit, and the
+    magnitude term peaks near the trigger instead of rewarding extension.
+    The breakout bar must at least match prior-20 average volume.
+    """
     code = "S2"
     name = "Trend pullback breakout"
 
@@ -72,31 +113,54 @@ class TrendPullbackBreakout:
         if atr <= 0:
             return Signal(False, None, 0.0, "")
         volx = ctx.vol_last / ctx.vol_avg if ctx.vol_avg > 0 else 0.0
+        if volx < CFG.s2_vol_gate:              # dead-volume breakouts are fades
+            return Signal(False, None, 0.0, "")
         vbonus = 0.1 if volx >= CFG.s2_vol_mult else 0.0
 
-        if ctx.wk_uptrend and ctx.pullback_up and price > ctx.don_hi and CFG.allow_long:
+        def mag(ext):
+            if ext <= CFG.s2_ext_sweet_atr:
+                return 1.0
+            span = CFG.s2_max_ext_atr - CFG.s2_ext_sweet_atr
+            return _clip01((CFG.s2_max_ext_atr - ext) / span) if span > 0 else 0.0
+
+        if (ctx.wk_uptrend and ctx.pullback_up and price > ctx.don_hi
+                and CFG.allow_long
+                and ctx.s2_age_up is not None and ctx.s2_age_up <= CFG.s2_max_age):
+            ext = (price - ctx.don_hi) / atr
+            if ext > CFG.s2_max_ext_atr:
+                return Signal(False, None, 0.0, "")
             tstr = _clip01((ctx.wema_fast - ctx.wema_slow) / ctx.wema_slow * 20) if ctx.wema_slow else 0.5
-            mag = _clip01((price - ctx.don_hi) / atr)
-            score = _clip01(0.4 * tstr + 0.3 * ctx.pullback_up_quality + 0.3 * mag + vbonus)
+            score = _clip01(0.4 * tstr + 0.3 * ctx.pullback_up_quality + 0.3 * mag(ext) + vbonus)
             return Signal(True, "long", score, "pullback breakout (wk uptrend)",
                           {"level": round(ctx.don_hi, 2),
-                           "breakout_atr": round((price - ctx.don_hi) / atr, 2),
-                           "volx": round(volx, 2), "pullback_pct": round(ctx.pullback_up_depth * 100, 1)})
+                           "breakout_atr": round(ext, 2), "age": ctx.s2_age_up,
+                           "volx": round(volx, 2),
+                           "pullback_pct": round(ctx.pullback_up_depth * 100, 1)})
 
-        if ctx.wk_downtrend and ctx.pullback_dn and price < ctx.don_lo and CFG.allow_short:
+        if (ctx.wk_downtrend and ctx.pullback_dn and price < ctx.don_lo
+                and CFG.allow_short
+                and ctx.s2_age_dn is not None and ctx.s2_age_dn <= CFG.s2_max_age):
+            ext = (ctx.don_lo - price) / atr
+            if ext > CFG.s2_max_ext_atr:
+                return Signal(False, None, 0.0, "")
             tstr = _clip01((ctx.wema_slow - ctx.wema_fast) / ctx.wema_slow * 20) if ctx.wema_slow else 0.5
-            mag = _clip01((ctx.don_lo - price) / atr)
-            score = _clip01(0.4 * tstr + 0.3 * ctx.pullback_dn_quality + 0.3 * mag + vbonus)
+            score = _clip01(0.4 * tstr + 0.3 * ctx.pullback_dn_quality + 0.3 * mag(ext) + vbonus)
             return Signal(True, "short", score, "breakdown (wk downtrend)",
                           {"level": round(ctx.don_lo, 2),
-                           "breakout_atr": round((ctx.don_lo - price) / atr, 2),
-                           "volx": round(volx, 2), "pullback_pct": round(ctx.pullback_dn_depth * 100, 1)})
+                           "breakout_atr": round(ext, 2), "age": ctx.s2_age_dn,
+                           "volx": round(volx, 2),
+                           "pullback_pct": round(ctx.pullback_dn_depth * 100, 1)})
 
         return Signal(False, None, 0.0, "")
 
 
 @register
 class RangeChopNeutral:
+    """Established, stable range with price mid-band and no trend conviction.
+
+    A range whose recent closes press a boundary is coiling for a breakout,
+    not chopping - rejected via s3_max_edge_closes.
+    """
     code = "S3"
     name = "Range / chop (neutral)"
 
@@ -104,7 +168,6 @@ class RangeChopNeutral:
         from .config import CFG
         if not CFG.allow_neutral:
             return Signal(False, None, 0.0, "")
-        # not trending, flat EMAs, price contained in the mid-band of a real range
         if ctx.adx_last >= CFG.s3_adx_max:
             return Signal(False, None, 0.0, "")
         if ctx.ema_sep_pct > CFG.s3_ema_flat_pct:
@@ -112,6 +175,8 @@ class RangeChopNeutral:
         if not (CFG.s3_min_width_pct <= ctx.range_width_pct <= CFG.s3_max_width_pct):
             return Signal(False, None, 0.0, "")
         if not (CFG.s3_pos_low <= ctx.range_pos <= CFG.s3_pos_high):
+            return Signal(False, None, 0.0, "")
+        if ctx.s3_edge_closes > CFG.s3_max_edge_closes:   # coiling, not chopping
             return Signal(False, None, 0.0, "")
 
         chop = _clip01(1 - ctx.adx_last / CFG.s3_adx_max)

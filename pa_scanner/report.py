@@ -7,7 +7,7 @@ Two layouts, chosen by market mode:
 import datetime as dt
 import json
 
-from .config import MARKETS
+from .config import CFG, MARKETS
 
 
 def _sparkline(closes, side, w=110, h=28, pad=2):
@@ -54,15 +54,19 @@ _HEAD_OPTIONS = """
   <th data-k="ticker">Ticker</th>
   <th data-k="signal">Sig</th>
   <th data-k="side">Side</th>
+  <th data-k="rank" class="num">Rank</th>
   <th data-k="score" class="num">Score</th>
   <th data-k="last" class="num">Last</th>
   <th data-k="live" class="num">Live</th>
   <th data-k="level" class="num">Level</th>
   <th data-k="dist" class="num">Dist/Brk(ATR)</th>
+  <th data-k="age" class="num">Age</th>
   <th data-k="detail">Detail</th>
   <th data-k="volx" class="num">Vol&times;</th>
   <th data-k="atr" class="num">ATR</th>
   <th data-k="atr_pct" class="num">ATR%</th>
+  <th data-k="rs_pct" class="num">RS</th>
+  <th data-k="ern" class="num">Ern(d)</th>
   <th data-k="regime">Regime</th>
   <th data-k="vol_state">Vol</th>
   <th data-k="structure">Structure</th>
@@ -76,11 +80,14 @@ _HEAD_DIRECTIONAL = """
   <th data-k="trend">Weekly Trend</th>
   <th data-k="signal">Sig</th>
   <th data-k="trigger">Trigger</th>
+  <th data-k="rank" class="num">Rank</th>
   <th data-k="score" class="num">Score</th>
   <th data-k="last" class="num">Last</th>
   <th data-k="atr_pct" class="num">ATR%</th>
+  <th data-k="rs_pct" class="num">RS</th>
   <th data-k="level" class="num">Level</th>
   <th data-k="dist" class="num">Dist/Brk(ATR)</th>
+  <th data-k="age" class="num">Age</th>
   <th data-k="detail">Detail</th>
   <th>Chart</th>"""
 
@@ -91,7 +98,9 @@ _FILTERS_OPTIONS = """
   <button data-f="S3">S3 chop</button>
   <button data-f="long">Long</button>
   <button data-f="short">Short</button>
-  <button data-f="neutral">Neutral</button>"""
+  <button data-f="neutral">Neutral</button>
+  <button data-f="rs">RS&gt;50</button>
+  <button data-f="ern">Ern OK</button>"""
 
 _FILTERS_DIRECTIONAL = """
   <button data-f="all" class="on">All</button>
@@ -101,7 +110,8 @@ _FILTERS_DIRECTIONAL = """
   <button data-f="avoid">Avoid / Watch</button>
   <button data-f="S1">S1</button>
   <button data-f="S2">S2</button>
-  <button data-f="S3">S3</button>"""
+  <button data-f="S3">S3</button>
+  <button data-f="rs">RS&gt;50</button>"""
 
 
 _TEMPLATE = """<!doctype html>
@@ -150,6 +160,7 @@ _TEMPLATE = """<!doctype html>
   <h1>__TITLE__</h1>
   <span class="meta">__DATE__</span>
   <span class="meta">universe __UNIVERSE__ &middot; liquid __SCANNED__ &middot; signals __NHITS__</span>
+  <span class="meta">__BENCH__</span>
 </header>
 <div class="bar">
   <input id="q" placeholder="filter ticker...">__FILTERS__
@@ -162,7 +173,7 @@ _TEMPLATE = """<!doctype html>
 const ROWS = __ROWS__;
 const MODE = "__MODE__";        // "options" | "directional"
 const TVP  = "__TV__";          // TradingView exchange prefix (ASX / NSE), "" for US
-let view = ROWS.slice(), sortK = "score", sortDir = -1, filt = "all", q = "";
+let view = ROWS.slice(), sortK = "rank", sortDir = -1, filt = "all", q = "";
 const $ = s => document.querySelector(s);
 function dispSym(t){ return MODE==="options" ? t : t.replace(/\\.(AX|NS)$/,''); }
 function tvSym(t){ return TVP ? (TVP+":"+dispSym(t)) : t; }
@@ -206,6 +217,16 @@ function optLiqCell(r){
   const sp = r.opt_spread!=null ? (oi?" \u00b7 ":"")+"sprd "+r.opt_spread+"%" : "";
   return `<b style="color:${c}">${r.opt_liq.toUpperCase()}</b> <span class="src">${oi}${sp}</span>`;
 }
+function rsCell(r){
+  if(r.rs_pct==null) return "";
+  const c = r.rs_pct>=70 ? "#3fb950" : (r.rs_pct<=30 ? "#f85149" : "#c9d1d9");
+  const t = (r.rs!=null)? ((r.rs>0?"+":"")+r.rs+"% vs bench") : "";
+  return `<span style="color:${c}" title="${t}">${r.rs_pct}</span>`;
+}
+function ernCell(r){
+  if(r.ern==null) return "";
+  return r.ern<=__ERNWARN__ ? `<b style="color:#d29922">${r.ern}</b>` : `${r.ern}`;
+}
 /* ---------- directional (ASX/India) cells ---------- */
 function actionCell(r){
   const T={pos:'#3fb950',warn:'#d29922',exit:'#f85149'};
@@ -227,26 +248,33 @@ function rowHTML(r){
       `<td>${trendCell(r)}</td>`+
       `<td><span class="tag ${r.signal.toLowerCase()}">${r.signal}</span></td>`+
       `<td class="${r.trigger}">${r.trigger||''}</td>`+
+      `<td class="num">${r.rank??""}</td>`+
       `<td class="num score">${r.score.toFixed(3)}</td>`+
       `<td class="num">${r.last}</td>`+
       `<td class="num">${r.atr_pct??""}</td>`+
+      `<td class="num">${rsCell(r)}</td>`+
       `<td class="num">${r.level??""}</td>`+
       `<td class="num">${r.dist??""}</td>`+
+      `<td class="num">${r.age??""}</td>`+
       `<td>${r.detail??""}</td>`+
       `<td>${r.spark_svg}</td>`+tv;
   }
   return head+
     `<td><span class="tag ${r.signal.toLowerCase()}">${r.signal}</span></td>`+
     `<td class="${r.side}">${r.side}</td>`+
+    `<td class="num">${r.rank??""}</td>`+
     `<td class="num score">${r.score.toFixed(3)}</td>`+
     `<td class="num">${r.last}</td>`+
     `<td class="num">${liveCell(r)}</td>`+
     `<td class="num">${r.level??""}</td>`+
     `<td class="num">${r.dist??""}</td>`+
+    `<td class="num">${r.age??""}</td>`+
     `<td>${r.detail??""}</td>`+
     `<td class="num">${r.volx??""}</td>`+
     `<td class="num">${r.atr}</td>`+
     `<td class="num">${r.atr_pct??""}</td>`+
+    `<td class="num">${rsCell(r)}</td>`+
+    `<td class="num">${ernCell(r)}</td>`+
     `<td>${regCell(r)}</td>`+
     `<td title="${volTitle(r)}">${volCell(r)}</td>`+
     `<td>${structCell(r)}</td>`+
@@ -258,6 +286,8 @@ function passes(r){
   if(q && !dispSym(r.ticker).toLowerCase().includes(q) && !r.ticker.toLowerCase().includes(q)) return false;
   if(filt==="all") return true;
   if(filt==="S1"||filt==="S2"||filt==="S3") return r.signal===filt;
+  if(filt==="rs") return r.rs_pct!=null && r.rs_pct>50;
+  if(filt==="ern") return r.ern==null || r.ern>__ERNWARN__;
   if(MODE==="directional"){
     if(filt==="buy")   return r.action==="BUY";
     if(filt==="hold")  return r.action==="HOLD";
@@ -294,8 +324,8 @@ document.querySelectorAll(".bar button[data-f]").forEach(btn=>btn.onclick=()=>{
 $("#q").oninput=e=>{q=e.target.value.trim().toLowerCase(); render();};
 $("#csv").onclick=()=>{
   const cols = MODE==="directional"
-    ? ["ticker","action","action_note","trend","trend_adx","signal","trigger","side","score","last","atr","atr_pct","level","dist","detail","label"]
-    : ["ticker","signal","side","score","last","live","live_status","live_dist","level","dist","detail","volx","atr","atr_pct",
+    ? ["ticker","action","action_note","trend","trend_adx","signal","trigger","side","rank","score","last","atr","atr_pct","rs","rs_pct","level","dist","age","detail","label"]
+    : ["ticker","signal","side","rank","score","last","live","live_status","live_dist","level","dist","age","detail","volx","atr","atr_pct","rs","rs_pct","ern",
        "regime","regime_adx","align","vol_state","vol_src","cell","structure","ivr","iv","rv","vrp","term","opt_liq","opt_oi","opt_spread","label"];
   const head=cols.join(",");
   const lines=view.map(r=>cols.map(c=>{
@@ -311,7 +341,7 @@ render();
 </script></body></html>"""
 
 
-def write_report(rows, path, scanned=0, universe=0, market="us"):
+def write_report(rows, path, scanned=0, universe=0, market="us", bench=None):
     mkt = MARKETS[market]
     directional = mkt["mode"] == "directional"
     enriched = _enrich(rows)
@@ -324,6 +354,10 @@ def write_report(rows, path, scanned=0, universe=0, market="us"):
                 .replace("__HEAD__", head)
                 .replace("__FILTERS__", filters)
                 .replace("__MODE__", mkt["mode"])
+                .replace("__ERNWARN__", str(CFG.earnings_warn_days))
+                .replace("__BENCH__",
+                         (f"{bench['symbol']}: {bench['bias'].upper()} (ADX {bench['adx']})"
+                          if bench else ""))
                 .replace("__TV__", mkt["tv"])
                 .replace("__TITLE__", title)
                 .replace("__MKT__", market)

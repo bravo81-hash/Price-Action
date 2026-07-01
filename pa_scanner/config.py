@@ -26,6 +26,12 @@ class Config:
     s1_pivot_lookback_weeks: int = 52
     s1_cluster_atr: float = 0.75      # zone-merge tolerance (x weekly ATR)
     s1_near_atr: float = 1.0          # "near" band (x daily ATR)
+    s1_approach_bars: int = 10        # prior closes defining the approach direction
+    s1_wick_frac: float = 0.5         # wick must reach within this x band of the zone
+    s1_close_frac: float = 0.5        # close must hold within this x band past the zone
+    s1_min_bar_range_atr: float = 0.5  # single-bar patterns need a real bar (x ATR)
+    s1_with_trend_bonus: float = 0.10  # reversal aligned with the weekly trend
+    s1_counter_trend_penalty: float = 0.15  # knife-catch against the weekly trend
 
     # --- Signal 2: trend pullback breakout ---
     s2_wema_fast: int = 10
@@ -37,6 +43,10 @@ class Config:
     s2_swing_window: int = 20
     s2_vol_window: int = 20
     s2_vol_mult: float = 1.2            # volume-expansion bonus threshold
+    s2_vol_gate: float = 1.0            # breakout bar must at least match prior-20 avg volume
+    s2_max_age: int = 2                 # breakout must be <= this many bars old (0 = today)
+    s2_max_ext_atr: float = 1.5         # reject entries further than this past the trigger
+    s2_ext_sweet_atr: float = 0.5       # full magnitude score up to this extension
 
     # --- Signal 3: range / chop (neutral) ---
     s3_adx_max: float = 20.0           # ADX below this = not trending
@@ -46,6 +56,9 @@ class Config:
     s3_min_width_pct: float = 0.04     # range wide enough to be tradeable (>=4%)
     s3_max_width_pct: float = 0.25     # but not a blow-off (<=25%)
     s3_ema_flat_pct: float = 0.015     # |emaFast - emaSlow| / price < this = flat
+    s3_edge_frac: float = 0.10         # boundary band as a fraction of range width
+    s3_max_edge_closes: int = 1        # >this many of last 3 closes at a boundary = coiling, reject
+    s3_vol_adj: float = 0.07           # US: S3 score +adj when vol rich, -adj when cheap
 
     # --- direction ---
     allow_long: bool = True
@@ -97,6 +110,14 @@ class Config:
     #   "regime" -> express the trend regime (legacy; can contradict the signal)
     structure_from: str = "signal"
 
+    # --- quality / ranking ---
+    rs_window: int = 63                # relative-strength lookback (days) vs the market benchmark
+    rs_adj_max: float = 0.10           # max score adjustment from RS percentile
+    index_penalty: float = 0.10        # counter-index-regime score penalty
+    min_score: float = 0.45            # post-adjustment score floor (CLI --min-score)
+    earnings_enrich: bool = True       # US: annotate days-to-earnings on hits (yfinance)
+    earnings_warn_days: int = 10       # <= this many days = warn tint / filter
+
     # --- report ---
     spark_bars: int = 40
 
@@ -110,11 +131,14 @@ CFG = Config()
 # index membership already guarantees liquidity, and turnover is in local ccy.
 MARKETS = {
     "us":  {"mode": "options",     "suffix": "",    "ccy": "USD", "label": "US",
-            "tv": "",    "min_price": 10.0, "min_dollar_vol": 20_000_000.0},
+            "tv": "",    "min_price": 10.0, "min_dollar_vol": 20_000_000.0,
+            "bench": "SPY"},
     "asx": {"mode": "directional", "suffix": ".AX", "ccy": "AUD", "label": "ASX",
-            "tv": "ASX", "min_price": 0.20, "min_dollar_vol": 0.0},
+            "tv": "ASX", "min_price": 0.20, "min_dollar_vol": 0.0,
+            "bench": "^AXJO"},
     "in":  {"mode": "directional", "suffix": ".NS", "ccy": "INR", "label": "India",
-            "tv": "NSE", "min_price": 5.0,  "min_dollar_vol": 0.0},
+            "tv": "NSE", "min_price": 5.0,  "min_dollar_vol": 0.0,
+            "bench": "^NSEI"},
 }
 
 

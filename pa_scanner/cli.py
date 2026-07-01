@@ -12,8 +12,9 @@ import argparse
 from .config import CFG, MARKETS
 from . import universe as uni
 from . import data as dl
-from .scanner import scan, add_regime
+from .scanner import scan, add_regime, add_market_context, compute_rank
 from .action import add_action
+from .earnings import annotate_earnings
 from .report import write_report
 from .webexport import write_web
 
@@ -42,6 +43,10 @@ def main():
     ap.add_argument("--no-html", action="store_true", help="skip the standalone HTML report")
     ap.add_argument("--no-iv", action="store_true",
                     help="skip yfinance ATM-IV enrichment; vol-state from realized vol only")
+    ap.add_argument("--min-score", type=float, default=None,
+                    help=f"post-adjustment score floor (default {CFG.min_score}; 0 disables)")
+    ap.add_argument("--no-earnings", action="store_true",
+                    help="US: skip days-to-earnings enrichment")
     ap.add_argument("--tws", action="store_true",
                     help="prefer the TWS vol provider (stub for now; falls back to approx)")
     ap.add_argument("--live", action="store_true",
@@ -86,6 +91,19 @@ def main():
 
     rows = scan(bundle)
 
+    # market context: relative strength vs the benchmark + index-regime read
+    bench_sym = mkt["bench"]
+    bd = dl.download_daily([bench_sym])
+    bench_daily = bd.get(bench_sym)
+    binfo = add_market_context(rows, bundle, bench_daily, market=a.market)
+
+    floor = CFG.min_score if a.min_score is None else a.min_score
+    if floor > 0:
+        n0 = len(rows)
+        rows = [r for r in rows if r["score"] >= floor]
+        print(f"[scan] score floor {floor}: {n0} -> {len(rows)} signals")
+    rows.sort(key=lambda r: r["score"], reverse=True)
+
     if directional:
         print(f"[scan] {len(rows)} signals; assigning long-only actions...")
         add_action(rows, bundle)
@@ -95,16 +113,21 @@ def main():
         vix_bw = fetch_vix_backwardation()
         add_regime(rows, bundle, iv_enrich=(CFG.iv_enrich_hits and not a.no_iv),
                    vix_backwardation=vix_bw, live=live)
+        if CFG.earnings_enrich and not a.no_earnings:
+            annotate_earnings(rows)
+
+    compute_rank(rows)
+    rows.sort(key=lambda r: (r.get("rank", 0), r["score"]), reverse=True)
 
     if a.web:
         path = write_web(rows, a.web, scanned=len(bundle), universe=len(syms),
-                         market=a.market)
+                         market=a.market, bench=binfo)
         print(f"[scan] -> {path} (+ dated snapshot)")
 
     if not a.no_html:
         out = a.out or ("pa_report.html" if a.market == "us" else f"pa_report_{a.market}.html")
         write_report(rows, out, scanned=len(bundle), universe=len(syms),
-                     market=a.market)
+                     market=a.market, bench=binfo)
         print(f"[scan] HTML report -> {out}")
 
 

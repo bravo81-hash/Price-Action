@@ -135,6 +135,38 @@ own JSON snapshot (`latest.json`, `latest_asx.json`, `latest_in.json`) and the
 cloud Action refreshes all three daily. Local buttons:
 `run_scan_asx.bat` / `run_scan_india.bat` (and `.command`).
 
+## Signal quality (v2)
+
+The signal core was hardened after review; the visible list should be shorter
+and materially better:
+
+- **S1 direction fixed** — a zone only counts as *support* if price approached
+  it from above and the bar's **low** actually tagged it (mirror for
+  resistance). Previously a rally poking above overhead supply could read as
+  "long @ support". Reversals aligned with the weekly trend score up;
+  knife-catches against it score down.
+- **S2 freshness + no chasing** — only breakouts whose Donchian cross happened
+  within the last `s2_max_age` (2) bars list, an **Age** column shows how old
+  the trigger is, entries further than 1.5 ATR past the trigger are rejected,
+  and the magnitude term now peaks near the trigger instead of rewarding
+  extension. The breakout bar must at least match prior-20 average volume
+  (self-dilution in the volume baseline also fixed).
+- **S3 stability** — ranges whose recent closes press a boundary are coiling,
+  not chopping, and are rejected; on the US tab, rich-vol chop ranks above
+  cheap-vol chop.
+- **Relative strength (RS)** — 63-day return vs the market benchmark
+  (SPY / ^AXJO / ^NSEI), shown as a universe percentile. Strong RS lifts longs;
+  weak RS lifts shorts/exits. `RS>50` filter chip on every tab.
+- **Index regime** — the benchmark's own trend read is shown in the header and
+  counter-index signals take a score penalty.
+- **Earnings (US)** — days-to-next-earnings on each hit (amber ≤10d, `Ern OK`
+  filter chip); yfinance best-effort, blank when unavailable.
+- **Rank + floor** — `rank` = score percentile within the signal's own rule
+  (cross-rule sortable; the default sort). A post-adjustment score floor
+  (`min_score` 0.45, CLI `--min-score`, 0 disables) cuts the weak tail.
+- Sub-half-ATR bars can't print hammer/star/tweezer patterns; tweezers are
+  down-weighted.
+
 ## Configuration
 
 All knobs live in `pa_scanner/config.py` (`CFG`). Key ones:
@@ -149,6 +181,12 @@ All knobs live in `pa_scanner/config.py` (`CFG`). Key ones:
 | `s2_pullback_lookback` | `10` | days to find the counter-trend dip |
 | `s2_require_structure` | `False` | also require weekly HH/HL (else scored) |
 | `s2_vol_mult` | `1.2` | volume-expansion bonus threshold |
+| `s2_max_age` | `2` | breakout freshness window (bars since Donchian cross) |
+| `s2_max_ext_atr` | `1.5` | reject entries further than this past the trigger |
+| `s2_vol_gate` | `1.0` | breakout bar volume must match prior-20 average |
+| `rs_window` | `63` | relative-strength lookback vs benchmark |
+| `min_score` | `0.45` | post-adjustment score floor (`--min-score`) |
+| `earnings_warn_days` | `10` | Ern column warn threshold (US) |
 | `opt_oi_min` | `250` | min combined ATM (call+put) OI before a US hit is flagged thin |
 | `opt_spread_max_pct` | `12.0` | max ATM bid/ask spread (% of mid) before thin |
 

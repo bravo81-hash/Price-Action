@@ -120,14 +120,17 @@ def main():
 
     print("S1 reversal-at-level (rule unit)")
     long_ctx = neutral_ctx(zones=[(99.0, 3)], last_close=100.0, atr_last=2.0,
+                           prior_med=101.5, last_low=98.7, last_high=100.6,
                            bull_patterns={"bullish_engulfing": 1.0})
     s1l = ReversalAtWeeklyLevel().evaluate(long_ctx)
     check("S1 long at support fires", s1l.hit and s1l.side == "long")
     short_ctx = neutral_ctx(zones=[(101.0, 3)], last_close=100.0, atr_last=2.0,
+                            prior_med=98.5, last_low=99.4, last_high=101.4,
                             bear_patterns={"bearish_engulfing": 1.0})
     s1s = ReversalAtWeeklyLevel().evaluate(short_ctx)
     check("S1 short at resistance fires", s1s.hit and s1s.side == "short")
     far_ctx = neutral_ctx(zones=[(80.0, 3)], last_close=100.0, atr_last=2.0,
+                          prior_med=101.0, last_low=99.2, last_high=100.6,
                           bull_patterns={"bullish_engulfing": 1.0})
     check("no S1 when level far (>1 ATR)", not ReversalAtWeeklyLevel().evaluate(far_ctx).hit)
 
@@ -298,6 +301,94 @@ def main():
           option_liquidity(300, 300, None, oi_min=250, spread_max=12)[0] == "ok")
     check("opt_liq returns combined OI",
           option_liquidity(300, 300, 5, oi_min=250, spread_max=12)[1] == 600)
+
+
+    print("quality gates (E1/E2/E3/E4 + U-series)")
+    # --- S1 approach direction: bull pattern near a zone approached from BELOW
+    #     (rallying into overhead supply) must NOT read as long-at-support
+    r1 = ReversalAtWeeklyLevel().evaluate(neutral_ctx(
+        zones=[(99.0, 3)], last_close=100.0, atr_last=2.0,
+        prior_med=96.0, last_low=98.7, last_high=100.6,
+        bull_patterns={"bullish_engulfing": 1.0}))
+    check("S1 rejects long into resistance (approach from below)", not r1.hit)
+    # --- S1 wick test: close near zone but the low never tagged it
+    r2 = ReversalAtWeeklyLevel().evaluate(neutral_ctx(
+        zones=[(99.0, 3)], last_close=100.4, atr_last=2.0,
+        prior_med=101.5, last_low=100.2, last_high=100.9,
+        bull_patterns={"bullish_engulfing": 1.0}))
+    check("S1 rejects when low never tagged the zone", not r2.hit)
+    # --- S1 run-away: close already >1 band above the zone
+    r3 = ReversalAtWeeklyLevel().evaluate(neutral_ctx(
+        zones=[(99.0, 3)], last_close=101.5, atr_last=2.0,
+        prior_med=101.6, last_low=98.9, last_high=101.8,
+        bull_patterns={"bullish_engulfing": 1.0}))
+    check("S1 rejects when close ran away from the zone", not r3.hit)
+    # --- S1 trend alignment moves score
+    base_kw = dict(zones=[(99.0, 3)], last_close=100.0, atr_last=2.0,
+                   prior_med=101.5, last_low=98.7, last_high=100.6,
+                   bull_patterns={"bullish_engulfing": 1.0})
+    s_flat = ReversalAtWeeklyLevel().evaluate(neutral_ctx(**base_kw)).score
+    s_with = ReversalAtWeeklyLevel().evaluate(neutral_ctx(**base_kw, wk_uptrend=True)).score
+    s_ctr = ReversalAtWeeklyLevel().evaluate(neutral_ctx(**base_kw, wk_downtrend=True)).score
+    check("S1 with-trend bonus applied", s_with > s_flat)
+    check("S1 counter-trend penalty applied", s_ctr < s_flat)
+
+    # --- S2 freshness / extension / volume gates (rule unit on synthetic ctx)
+    s2kw = dict(last_close=102.0, atr_last=2.0, vol_last=2.5e6, vol_avg=2e6,
+                wk_uptrend=True, pullback_up=True, pullback_up_quality=0.8,
+                pullback_up_depth=0.05, wema_fast=105.0, wema_slow=100.0,
+                don_hi=101.0, don_lo=90.0)
+    ok = TrendPullbackBreakout().evaluate(neutral_ctx(**s2kw, s2_age_up=0))
+    check("S2 fresh breakout fires", ok.hit and ok.meta["age"] == 0)
+    stale = TrendPullbackBreakout().evaluate(neutral_ctx(**s2kw, s2_age_up=5))
+    check("S2 stale breakout (age 5) rejected", not stale.hit)
+    ext_kw = dict(s2kw, last_close=105.0)          # 2 ATR past the trigger
+    ext = TrendPullbackBreakout().evaluate(neutral_ctx(**ext_kw, s2_age_up=0))
+    check("S2 over-extended entry rejected", not ext.hit)
+    dead_kw = dict(s2kw, vol_last=1.5e6)           # volx 0.75 < gate
+    dead = TrendPullbackBreakout().evaluate(neutral_ctx(**dead_kw, s2_age_up=0))
+    check("S2 dead-volume breakout rejected", not dead.hit)
+    near = TrendPullbackBreakout().evaluate(neutral_ctx(**s2kw, s2_age_up=0))
+    far_kw = dict(s2kw, last_close=103.4)          # 1.2 ATR ext, inside cap
+    far = TrendPullbackBreakout().evaluate(neutral_ctx(**far_kw, s2_age_up=0))
+    check("S2 magnitude decays with extension", near.score > far.score)
+
+    # --- S3 coiling rejection
+    s3kw = dict(adx_last=10.0, ema_sep_pct=0.001, range_width_pct=0.06,
+                range_pos=0.5, range_hi=106.0, range_lo=100.0, range_crosses=4)
+    s3ok = RangeChopNeutral().evaluate(neutral_ctx(**s3kw, s3_edge_closes=1))
+    check("S3 stable range fires", s3ok.hit)
+    s3coil = RangeChopNeutral().evaluate(neutral_ctx(**s3kw, s3_edge_closes=2))
+    check("S3 coiling range (2 edge closes) rejected", not s3coil.hit)
+
+    # --- relative strength + index penalty (add_market_context)
+    from .scanner import add_market_context, compute_rank
+    strong = make_s2("long"); weak = make_s2("short"); bench = make_range()
+    bnd = {"STR": (strong, dl.to_weekly(strong)), "WEA": (weak, dl.to_weekly(weak))}
+    rrows = [{"ticker": "STR", "side": "long", "score": 0.5, "signal": "S2"},
+             {"ticker": "WEA", "side": "short", "score": 0.5, "signal": "S2"}]
+    binfo = add_market_context(rrows, bnd, bench, market="us")
+    check("RS annotated on hits", all(r["rs"] is not None for r in rrows))
+    check("uptrend name outranks downtrend on RS",
+          rrows[0]["rs_pct"] > rrows[1]["rs_pct"])
+    check("RS lifts strong long + weak short symmetrically",
+          rrows[0]["score"] > 0.5 and rrows[1]["score"] > 0.5)
+    check("flat benchmark reads neutral (no penalty case)",
+          binfo is not None and binfo["bias"] == "neutral")
+    pen = [{"ticker": "STR", "side": "long", "score": 0.5, "signal": "S2"}]
+    add_market_context(pen, {"STR": bnd["STR"]}, weak, market="us")  # bearish bench
+    check("counter-index long penalized", pen[0]["score"] < 0.5 + CFG.rs_adj_max)
+
+    # --- rank percentile within rule
+    rk = [{"signal": "S2", "score": 0.9}, {"signal": "S2", "score": 0.5},
+          {"signal": "S2", "score": 0.7}, {"signal": "S1", "score": 0.4}]
+    compute_rank(rk)
+    check("rank: best-in-rule = 100", rk[0]["rank"] == 100)
+    check("rank: worst-in-rule = 0", rk[1]["rank"] == 0)
+    check("rank: solo rule row = 100", rk[3]["rank"] == 100)
+    tie = [{"signal": "S2", "score": 0.5}, {"signal": "S2", "score": 0.5}]
+    compute_rank(tie)
+    check("rank: ties share the midpoint", tie[0]["rank"] == 50 and tie[1]["rank"] == 50)
 
     print(f"\n{len(PASS)} passed, {len(FAIL)} failed")
     if FAIL:
