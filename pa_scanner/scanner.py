@@ -229,12 +229,16 @@ def add_market_context(rows, bundle, bench_daily=None, market="us"):
     import bisect
     w = CFG.rs_window
     bench_ret, binfo = None, None
-    if bench_daily is not None and len(bench_daily) > w:
-        bc = bench_daily["close"]
-        bench_ret = float(bc.iloc[-1] / bc.iloc[-1 - w] - 1)
-        bias, bm = rg.direction_read(bench_daily)
-        binfo = {"symbol": MARKETS[market]["bench"], "bias": bias,
-                 "adx": round(bm["adx"], 1)}
+    try:                                   # benchmark is best-effort, never fatal
+        if (bench_daily is not None and len(bench_daily) > w
+                and "close" in bench_daily.columns):
+            bc = bench_daily["close"]
+            bench_ret = float(bc.iloc[-1] / bc.iloc[-1 - w] - 1)
+            bias, bm = rg.direction_read(bench_daily)
+            binfo = {"symbol": MARKETS[market]["bench"], "bias": bias,
+                     "adx": round(bm["adx"], 1)}
+    except Exception:
+        bench_ret, binfo = None, None
 
     rs_map = {}
     for t, (d, _) in bundle.items():

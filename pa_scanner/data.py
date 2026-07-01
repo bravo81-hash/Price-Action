@@ -14,8 +14,29 @@ from .config import CFG
 COLS = ["open", "high", "low", "close", "volume"]
 
 
+def _flatten(df: pd.DataFrame) -> pd.DataFrame:
+    """Collapse yfinance MultiIndex columns to the OHLCV field level.
+
+    Single-ticker downloads with group_by='ticker' (and some yfinance versions
+    generally) return 2-level columns like (TICKER, Close) or (Close, TICKER).
+    Pick whichever level actually holds the field names and drop the other.
+    """
+    if not isinstance(df.columns, pd.MultiIndex):
+        return df
+    fields = {"open", "high", "low", "close", "volume", "adj close"}
+    for lvl in range(df.columns.nlevels):
+        vals = {str(v).lower() for v in df.columns.get_level_values(lvl)}
+        if vals & fields:
+            out = df.copy()
+            out.columns = df.columns.get_level_values(lvl)
+            return out
+    return df
+
+
 def _norm(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.rename(columns=str.lower)
+    df = _flatten(df)
+    df = df.rename(columns=lambda c: str(c).lower())
+    df = df.loc[:, ~df.columns.duplicated()]
     keep = [c for c in COLS if c in df.columns]
     return df[keep].dropna()
 

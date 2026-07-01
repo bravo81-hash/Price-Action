@@ -390,6 +390,22 @@ def main():
     compute_rank(tie)
     check("rank: ties share the midpoint", tie[0]["rank"] == 50 and tie[1]["rank"] == 50)
 
+    # --- yfinance MultiIndex column shapes (single-ticker downloads) ---
+    idx = pd.bdate_range("2024-01-01", periods=5)
+    base = {"Open": 1.0, "High": 2.0, "Low": 0.5, "Close": 1.5, "Volume": 100.0}
+    tf = pd.DataFrame({("SPY", k): v for k, v in base.items()}, index=idx)   # (ticker, field)
+    ft = pd.DataFrame({(k, "SPY"): v for k, v in base.items()}, index=idx)   # (field, ticker)
+    n1, n2 = dl._norm(tf), dl._norm(ft)
+    check("_norm flattens (ticker, field) columns", list(n1.columns) == dl.COLS)
+    check("_norm flattens (field, ticker) columns", list(n2.columns) == dl.COLS)
+    flat = pd.DataFrame({k: v for k, v in base.items()}, index=idx)
+    check("_norm leaves flat columns intact", list(dl._norm(flat).columns) == dl.COLS)
+    from .scanner import add_market_context as _amc
+    bad = pd.DataFrame({("SPY", "x"): [1.0] * 200}, index=pd.bdate_range("2024-01-01", periods=200))
+    ok_rows = [{"ticker": "STR", "side": "long", "score": 0.5, "signal": "S2"}]
+    b2 = _amc(ok_rows, {"STR": (make_s2("long"), dl.to_weekly(make_s2("long")))}, bad, market="us")
+    check("bench without close degrades to None (no crash)", b2 is None)
+
     print(f"\n{len(PASS)} passed, {len(FAIL)} failed")
     if FAIL:
         print("FAILED:", ", ".join(FAIL))
