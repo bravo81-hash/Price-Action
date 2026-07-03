@@ -117,7 +117,7 @@ def main():
             annotate_earnings(rows)
 
     compute_rank(rows)
-    add_exit_levels(rows)
+    add_exit_levels(rows, market=a.market)
     rows.sort(key=lambda r: (r.get("rank", 0), r["score"]), reverse=True)
 
     if a.web:

@@ -158,6 +158,22 @@ Honest positioning after 59k backtested events across all three markets:
 - Isolated significant cells (single patterns in single markets) are treated
   as multiple-comparison artifacts unless they replicate.
 
+**Horizon study (10/21/42/63d, cooldown 42):**
+
+- **US: do not extend directional holds past ~21d.** Signal excess turns
+  significantly negative at 42-63d (S2 t=-4.6 to -5.4; longs alone -1.4%,
+  t=-2.9). Part is vol/beta composition (signals cluster in high-ATR names),
+  but the conclusion stands. The bench-bearish stand-down strengthens with
+  horizon (-2.45% @63d, t=-4.5). S3 quiet-name selection persists to 63d
+  (11.3% vs 12.7% baseline abs move) - validating 30-60 DTE premium tenors.
+- **India: S2 BUYs are 6-13 week position trades** (+0.95-1.14% excess at
+  42-63d, t~1.8-2.3, favorable MAE/MFE skew). These rows carry the POSITION
+  exit template: stop 3.5xATR / target 4.5xATR / 63-bar time exit
+  (`in_pos_*` knobs). India exit flags strengthen at 63d - treat as
+  underweight-for-months, not a short-term trim.
+- **ASX: null at every horizon** - remains a candidate screen on the 10-bar
+  swing template.
+
 ## Signal quality (v2)
 
 The signal core was hardened after review; the visible list should be shorter

@@ -306,28 +306,36 @@ def compute_rank(rows):
     return rows
 
 
-def add_exit_levels(rows):
+def add_exit_levels(rows, market="us"):
     """Stop / target / time-exit per hit, from the 5y MAE/MFE study.
 
-    Directional: stop = 2.0 x ATR against, target = 1.5 x ATR with (median MAE
-    over 10 bars was ~-3.4% ~ 1.5-2 ATR; median MFE ~ +3.4%). Neutral (S3):
-    the range edges are the short-strike references. Time exit: 10 bars.
+    Swing template (default): stop 2.0 x ATR, target 1.5 x ATR, 10 bars
+    (10d med MAE ~ -3.4%). Neutral (S3): range edges as short-strike refs.
+    India S2 longs use the POSITION template - the horizon study showed
+    +0.95-1.14% excess at 42-63d (t~1.8-2.3) with favorable skew - stop
+    3.5 x ATR, target 4.5 x ATR, 63 bars (63d med MAE -7.9% / MFE +9.6%).
+    US directional holds should NOT be extended: 42-63d excess is negative
+    (S2 t=-4.6), so US keeps the 10-bar template.
     """
     for r in rows:
         atr, last = r.get("atr"), r.get("last")
         if not atr or not last:
             r["stop"], r["tgt"] = None, None
             continue
+        position = (market == "in" and r.get("signal") == "S2"
+                    and r.get("side") == "long")
+        stop_k = CFG.in_pos_stop_atr if position else CFG.exit_stop_atr
+        tgt_k = CFG.in_pos_tgt_atr if position else CFG.exit_target_atr
         if r["side"] == "long":
-            r["stop"] = round(last - CFG.exit_stop_atr * atr, 2)
-            r["tgt"] = round(last + CFG.exit_target_atr * atr, 2)
+            r["stop"] = round(last - stop_k * atr, 2)
+            r["tgt"] = round(last + tgt_k * atr, 2)
         elif r["side"] == "short":
-            r["stop"] = round(last + CFG.exit_stop_atr * atr, 2)
-            r["tgt"] = round(last - CFG.exit_target_atr * atr, 2)
+            r["stop"] = round(last + stop_k * atr, 2)
+            r["tgt"] = round(last - tgt_k * atr, 2)
         else:  # neutral: condor short-strike references
             r["stop"] = r.get("range_lo")
             r["tgt"] = r.get("range_hi")
-        r["time_exit"] = CFG.exit_time_bars
+        r["time_exit"] = CFG.in_pos_time_bars if position else CFG.exit_time_bars
     return rows
 
 

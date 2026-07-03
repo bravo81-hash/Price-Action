@@ -417,6 +417,19 @@ def main():
     check("short exit levels mirrored", xr[1]["stop"] == 104.0 and xr[1]["tgt"] == 97.0)
     check("neutral exits = range edges", xr[2]["stop"] == 95.0 and xr[2]["tgt"] == 105.0)
     check("time exit attached", all(r["time_exit"] == CFG.exit_time_bars for r in xr))
+    pos = [{"side": "long", "signal": "S2", "last": 100.0, "atr": 2.0},
+           {"side": "long", "signal": "S1", "last": 100.0, "atr": 2.0},
+           {"side": "short", "signal": "S2", "last": 100.0, "atr": 2.0}]
+    add_exit_levels(pos, market="in")
+    check("India S2 long -> position template (3.5/4.5 ATR, 63 bars)",
+          pos[0]["stop"] == 93.0 and pos[0]["tgt"] == 109.0 and pos[0]["time_exit"] == 63)
+    check("India S1 long stays swing template",
+          pos[1]["stop"] == 96.0 and pos[1]["time_exit"] == CFG.exit_time_bars)
+    check("India S2 short stays swing template",
+          pos[2]["stop"] == 104.0 and pos[2]["time_exit"] == CFG.exit_time_bars)
+    us = [{"side": "long", "signal": "S2", "last": 100.0, "atr": 2.0}]
+    add_exit_levels(us, market="us")
+    check("US S2 long stays swing template", us[0]["time_exit"] == CFG.exit_time_bars)
 
     print("backtest harness")
     from .backtest import verify_parity, run_backtest, _dedup, _fwd

@@ -123,6 +123,10 @@ class Config:
     exit_stop_atr: float = 2.0         # protective stop distance (x ATR)
     exit_target_atr: float = 1.5       # first target distance (x ATR)
     exit_time_bars: int = 10           # time stop (bars) matching the study horizon
+    # India S2 longs: 42-63d positive excess (t~1.8-2.3, 5y study) -> position template
+    in_pos_stop_atr: float = 3.5       # from 63d med MAE ~ -7.9%
+    in_pos_tgt_atr: float = 4.5        # from 63d med MFE ~ +9.6%
+    in_pos_time_bars: int = 63
     bench_standdown: bool = True       # warn when the benchmark regime reads bearish
                                        # (5y US study: all signals -0.63% excess, t=-4.0)
 
