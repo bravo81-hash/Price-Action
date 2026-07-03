@@ -556,7 +556,8 @@ def run_backtest(bundle, market="us", bench_daily=None, horizons=(1, 3, 5, 10),
                      f"(lower = better for premium selling)\n")
 
     # MAE/MFE for stop placement
-    codes = ("NH52", "HVOL", "GAPD", "OSMR", "PBEMA") if use_candidates else ("S1", "S2")
+    codes = (tuple(sorted({e["signal"] for e in dir_ev})) if use_candidates
+             else ("S1", "S2"))
     for code in codes:
         evs = [e for e in dir_ev if e["signal"] == code]
         if evs:

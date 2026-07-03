@@ -525,66 +525,56 @@ def main():
     s4rows = [r for r in _scan(sb4) if r["signal"] == "S4"]
     check("S4 fires end-to-end in scan()", len(s4rows) == 1 and s4rows[0]["side"] == "long")
 
-    print("candidate setups (experimental)")
+    print("candidate setups (experimental, round 2)")
     from pa_scanner import candidates as cnds
 
     def cframe(n=340, drift=0.0, seed=1):
         rng = np.random.default_rng(seed)
         c = 100.0 + drift * np.arange(n) + rng.normal(0, 0.05, n).cumsum()
         o = c + rng.normal(0, 0.05, n)
-        h = np.maximum(o, c) + 0.5
-        lo_ = np.minimum(o, c) - 0.5
         idx = pd.bdate_range("2021-01-04", periods=n)
-        return pd.DataFrame({"open": o, "high": h, "low": lo_, "close": c,
+        return pd.DataFrame({"open": o, "high": np.maximum(o, c) + 0.5,
+                             "low": np.minimum(o, c) - 0.5, "close": c,
                              "volume": np.full(n, 2e6)}, index=idx)
 
-    ctrl = cframe()
+    ctrl = cframe(drift=-0.08)          # downtrend: 200SMA gate blocks all
     Pc = cnds.prep_arrays(ctrl)
-    check("candidates: control frame fires nothing",
+    check("candidates: downtrend control fires nothing",
           all(cd.check(Pc, len(ctrl) - 1) is None for cd in cnds.CANDIDATES))
 
-    d = cframe()
-    d.iloc[-1, d.columns.get_loc("close")] = d["close"].max() * 1.03
-    d.iloc[-1, d.columns.get_loc("high")] = d["close"].iloc[-1] + 0.5
-    d.iloc[-1, d.columns.get_loc("volume")] = 4e6
-    r = cnds.NH52().check(cnds.prep_arrays(d), len(d) - 1)
-    check("NH52 fires on fresh 252d high + volume", r is not None and r[0] == "long")
-
-    d = cframe(); d.iloc[-1, d.columns.get_loc("volume")] = 9e6
-    d.iloc[-1, d.columns.get_loc("close")] = d["close"].iloc[-2] * 1.01
-    check("HVOL long on 4x-vol up close",
-          (cnds.HVOL().check(cnds.prep_arrays(d), len(d) - 1) or ("",))[0] == "long")
-    d.iloc[-1, d.columns.get_loc("close")] = d["close"].iloc[-2] * 0.99
-    check("HVOL short on 4x-vol down close",
-          (cnds.HVOL().check(cnds.prep_arrays(d), len(d) - 1) or ("",))[0] == "short")
-
-    d = cframe()
-    atrv = ind.atr(d).iloc[-1]; prev = d["close"].iloc[-2]
-    d.iloc[-1, d.columns.get_loc("open")] = prev + 1.5 * atrv
-    d.iloc[-1, d.columns.get_loc("close")] = prev + 1.7 * atrv
-    d.iloc[-1, d.columns.get_loc("high")] = prev + 1.9 * atrv
-    d.iloc[-1, d.columns.get_loc("low")] = prev + 1.4 * atrv
-    d.iloc[-1, d.columns.get_loc("volume")] = 7e6
-    check("GAPD long on held 1.5-ATR gap",
-          (cnds.GAPD().check(cnds.prep_arrays(d), len(d) - 1) or ("",))[0] == "long")
+    d = cframe(drift=0.15)
+    for k, off in ((4, 0.0), (3, 1.2), (2, 2.4), (1, 3.6)):
+        d.iloc[-k, d.columns.get_loc("close")] = d["close"].iloc[-5] - 1.0 - off
+    Pf = cnds.prep_arrays(d)
+    check("OSMR2 fires on RSI(2) flush",
+          (cnds.OSMR2().check(Pf, len(d) - 1) or ("",))[0] == "long")
+    check("STRK4 fires on 4-down streak",
+          (cnds.STRK4().check(Pf, len(d) - 1) or ("",))[0] == "long")
 
     d = cframe(drift=0.15)
-    for k, off in ((3, 0.0), (2, 1.5), (1, 3.0)):
-        d.iloc[-k, d.columns.get_loc("close")] = d["close"].iloc[-4] - 1.0 - off
-    check("OSMR long on RSI3 oversold in uptrend",
-          (cnds.OSMR().check(cnds.prep_arrays(d), len(d) - 1) or ("",))[0] == "long")
+    d.iloc[-1, d.columns.get_loc("close")] = d["close"].iloc[-8:-1].min() - 0.5
+    check("LO7 fires on 7-day-low close",
+          (cnds.LO7().check(cnds.prep_arrays(d), len(d) - 1) or ("",))[0] == "long")
 
-    d = cframe(drift=0.5)
-    e20f = ind.ema(d["close"], 20).iloc[-1]
-    d.iloc[-1, d.columns.get_loc("low")] = e20f - 0.2
-    check("PBEMA long on momentum-leader EMA touch",
-          (cnds.PBEMA().check(cnds.prep_arrays(d), len(d) - 1) or ("",))[0] == "long")
+    d = cframe(drift=0.15)
+    d.iloc[-1, d.columns.get_loc("close")] = d["close"].iloc[-2] - 8.0
+    d.iloc[-1, d.columns.get_loc("low")] = d["close"].iloc[-1] - 0.5
+    check("BBMR fires below the lower band",
+          (cnds.BBMR().check(cnds.prep_arrays(d), len(d) - 1) or ("",))[0] == "long")
+
+    d = cframe(drift=0.15)
+    prev = d["close"].iloc[-2]
+    d.iloc[-1, d.columns.get_loc("high")] = prev + 1.0
+    d.iloc[-1, d.columns.get_loc("low")] = prev - 1.5
+    d.iloc[-1, d.columns.get_loc("close")] = prev - 1.3
+    check("IBSMR fires with close pinned to the low",
+          (cnds.IBSMR().check(cnds.prep_arrays(d), len(d) - 1) or ("",))[0] == "long")
 
     # e2e candidate study on synthetic
     from .backtest import candidate_events_for_ticker
     dd = cframe(n=400, drift=0.15, seed=2)
-    for k, off in ((13, 0.0), (12, 1.5), (11, 3.0)):
-        dd.iloc[-k, dd.columns.get_loc("close")] = dd["close"].iloc[-14] - 1.0 - off
+    for k, off in ((14, 0.0), (13, 1.2), (12, 2.4), (11, 3.6)):
+        dd.iloc[-k, dd.columns.get_loc("close")] = dd["close"].iloc[-15] - 1.0 - off
     cev, _ = candidate_events_for_ticker("SYN", dd, 10)
     check("candidate replay emits events", len(cev) > 0
           and all(k in cev[0] for k in ("signal", "side", "score", "t")))

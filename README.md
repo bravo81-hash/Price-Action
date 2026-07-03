@@ -257,9 +257,17 @@ high + volume), **HVOL** (>=3x-volume day premium, both sides), **GAPD**
 (>=1-ATR gap held into the close, PEAD proxy, both sides), **OSMR** (RSI(3)
 oversold snapback above the 200SMA), **PBEMA** (6-month momentum leader, first
 20-EMA touch). Promotion bar (pre-registered): |t| >= 2.5 at two adjacent
-horizons with consistent sign, or >= 2.0 replicated across US and ASX. Study verdicts (5y, side-matched): **OSMR promoted -> live rule S4**;
+horizons with consistent sign, or >= 2.0 replicated across US and ASX. Round-1 verdicts (5y, side-matched): **OSMR promoted -> live rule S4**;
 PBEMA near-miss (US 63d t=2.33, ASX 1.65) parked for out-of-sample re-test;
-NH52/HVOL/GAPD failed; all candidate shorts harmful (US t=-3.9).
+NH52/HVOL/GAPD failed and were deleted; all candidate shorts harmful (US t=-3.9).
+
+**Round 2 (current file)**: five long-only mean-reversion variants of the
+promoted OSMR family, all gated on close > 200SMA - OSMR2 (RSI(2)<10, doubles
+as the S4 parameter test: S4 switches to RSI(2) only if it beats RSI(3) at 5d
+in BOTH markets), LO7 (Connors Double-7s), BBMR (lower Bollinger), STRK4
+(4+ down closes), IBSMR (internal bar strength < 0.15). They overlap heavily,
+so at most ONE additional rule gets promoted unless event dates prove
+distinctness.
 
 ## Configuration
 
