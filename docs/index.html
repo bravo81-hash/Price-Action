@@ -46,6 +46,21 @@
  .score{font-weight:600}
  a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
  .state{padding:40px 20px;color:var(--mut)}
+ .ref{padding:20px;max-width:980px}
+ .ref h2{font-size:15px;margin:26px 0 8px;color:var(--fg);border-bottom:1px solid var(--bd);padding-bottom:6px}
+ .ref h2:first-child{margin-top:0}
+ .ref h3{font-size:13px;margin:16px 0 6px;color:var(--accent)}
+ .ref p{color:#c9d1d9;margin:6px 0}
+ .ref ul{margin:6px 0;padding-left:20px}
+ .ref li{margin:4px 0;color:#c9d1d9}
+ .ref table{width:auto;margin:8px 0 14px;border-collapse:collapse}
+ .ref th,.ref td{padding:5px 10px;border:1px solid var(--bd);white-space:normal;font-size:12px}
+ .ref th{background:var(--panel);color:var(--mut)}
+ .card{background:var(--panel);border:1px solid var(--bd);border-radius:8px;
+   padding:12px 16px;margin:10px 0}
+ .card b.mkt{color:var(--accent)}
+ .pos{color:var(--grn)} .neg{color:var(--red)} .neu{color:var(--mut)}
+ .ref code{background:#1c2230;padding:1px 5px;border-radius:4px;font-size:11.5px}
 </style></head><body>
 <header>
   <h1 id="title">PRICE-ACTION SCAN</h1>
@@ -56,6 +71,8 @@
   <button data-m="us" class="on">US</button>
   <button data-m="asx">ASX</button>
   <button data-m="in">India</button>
+  <button data-m="backtest">Backtest</button>
+  <button data-m="guide">Guide</button>
 </div>
 <div class="banner" id="banner"></div>
 <div class="bar">
@@ -68,6 +85,135 @@
 </div>
 <table id="t"><thead><tr id="head"></tr></thead><tbody id="b"></tbody></table>
 <div id="state" class="state">Loading…</div>
+
+<div id="backtestPanel" class="ref" style="display:none">
+<h2>Backtest — gist (5y event study, side-matched baselines)</h2>
+<p>Every rule was replayed over 5 years of history with the exact live scanner logic
+(<code>pa_scanner/backtest.py</code>, parity-verified against the live scanner) and scored
+against a seeded random baseline matched by side (long events vs random longs, short vs
+random shorts — so market drift can't masquerade as edge). ~60,000 events across three
+markets. Full per-slice tables live in <code>backtest/report_&lt;mkt&gt;.md</code> after a local run.</p>
+
+<div class="card"><b class="mkt">US</b> — S3 (chop/quiet-name selection) is the validated edge.
+<ul>
+<li><span class="neu">S1/S2 directional entries: no aggregate alpha</span> after drift correction (all rule×side |t|&lt;1.6 at 10d).</li>
+<li><span class="neg">Do not extend directional holds past ~21 days</span> — excess turns significantly negative at 42–63d (S2 t=−4.6 to −5.4; longs alone −1.4%, t=−2.9). Part is vol/beta composition (signals cluster in high-ATR names), but the conclusion holds.</li>
+<li><span class="pos">S3 quiet-name selection persists to 63d</span> (11.3% vs 12.7% baseline abs move) — validates 30–60 DTE premium-selling tenors.</li>
+<li><span class="neg">Bench-bearish stand-down is real and strengthens with horizon</span>: −0.63% excess at 10d (t=−4.0) → −2.45% at 63d (t=−4.5). Dashboard shows a STAND-DOWN banner in this state.</li>
+<li><span class="neg">evening_star retired</span> as an S1 trigger — worst-of-side pattern in every market (US t=−6.0).</li>
+<li>Score deciles are flat over 5y — score/rank are list organizers, not predictive.</li>
+</ul></div>
+
+<div class="card"><b class="mkt">India</b> — the strongest directional result in the study.
+<ul>
+<li><span class="pos">S1 bearish EXIT flags are validated</span>: +0.54% excess at 10d (t=2.99), strengthening to +1.07% at 63d (t=1.92) — treat as underweight-for-months, not a short-term trim.</li>
+<li><span class="pos">S2 BUY (long) is a 6–13 week position trade</span>: +0.95–1.14% excess at 42–63d (t≈1.8–2.3), favorable skew (med MAE −7.9% / med MFE +9.6%). These rows use the <b>position exit template</b> — stop 3.5×ATR, target 4.5×ATR, 63-bar time exit.</li>
+<li>Everything else (S1 longs, S2 shorts) keeps the standard 10-bar swing template.</li>
+</ul></div>
+
+<div class="card"><b class="mkt">ASX</b> — null at every horizon tested (10/21/42/63d).
+<ul>
+<li>No rule, side, or slice cleared significance after drift correction.</li>
+<li>Remains a curated candidate screen on the standard 10-bar swing template — treat hits as watchlist generation, not a timing edge.</li>
+</ul></div>
+
+<div class="card"><b>Kept vs. changed</b> (round-1 and round-2 decisions from the 2y and 5y runs):
+<ul>
+<li><b>Kept:</b> S1 shorts (2y "collapse" was baseline drift, not a real effect — 5y side-matched shows |t|&lt;0.8); India S2 (null, not negative — still generates candidates); score/rank as organizers.</li>
+<li><b>Changed:</b> <code>s2_max_age</code> 2→1 (age-2 entries negative in US+ASX); evening_star retired; side-matched baselines replace the original mixed baseline; exit templates (Stop/Tgt/time_exit columns) added from MAE/MFE distributions; India S2-long position template added from the horizon study.</li>
+<li><b>Rejected:</b> full score-weight rebuild (deciles flat over 5y — nothing stable to fit); fundamentals in scoring (no point-in-time history available via yfinance → unvalidatable, display-only if ever added).</li>
+</ul></div>
+</div>
+
+<div id="guidePanel" class="ref" style="display:none">
+<h2>How to use this app</h2>
+<p>Three tabs (US / ASX / India) show the day's scanner output for that market. Each row is a
+ticker where one of the three rules fired. Click column headers to sort; use the filter chips
+and the ticker search box to narrow the list; <b>Export CSV</b> downloads the current filtered view.</p>
+
+<h2>The three signal rules (all markets)</h2>
+<table><tr><th>Code</th><th>Name</th><th>What it looks for</th></tr>
+<tr><td><b>S1</b></td><td>Reversal at weekly level</td>
+<td>Price tests a weekly support/resistance zone (52-week pivots) with a daily reversal candle
+(engulfing, hammer, star). Requires the correct approach direction and a wick that actually
+tags the zone — a rally poking above resistance does not count as "support."</td></tr>
+<tr><td><b>S2</b></td><td>Trend pullback breakout</td>
+<td>Weekly trend (EMA-based) pulls back, then the daily close breaks the 7-day Donchian
+channel with volume confirmation. Must be fresh (≤1 bar old) and not already extended
+&gt;1.5 ATR past the trigger — stale, chased breakouts are excluded.</td></tr>
+<tr><td><b>S3</b></td><td>Range / chop (neutral)</td>
+<td>Low ADX, flat weekly EMAs, price mid-range, no boundary-pressing closes (which would mean
+coiling, not chopping). Validated in the backtest as genuine low-realized-move selection in
+all three markets — see the Backtest tab.</td></tr>
+</table>
+
+<h2>US tab — options playbook</h2>
+<p>Signals are enriched with vol context for short-premium selection, not used as standalone
+directional bets (the backtest found no aggregate directional alpha here).</p>
+<ul>
+<li><b>Regime / Structure</b> — weekly trend read (bullish/bearish/neutral) and the suggested
+options structure for that regime × signal combination.</li>
+<li><b>Vol / IVR / IV / RV / VRP / Term</b> — implied-vol context; IVR/IV are TWS-only (blank on
+the free yfinance path). Vol state (cheap/fair/rich) adjusts the S3 score.</li>
+<li><b>Opt Liq</b> — ATM open interest + bid/ask spread flag (OK/thin), TWS-only.</li>
+<li><b>Live</b> — real-time last-hour trigger status, only populated by <code>--live</code> runs.</li>
+<li><b>STAND-DOWN banner</b> — shown when the SPY benchmark regime reads bearish. Backtest-
+validated risk signal (−0.63% to −2.45% excess depending on horizon) — reduce size or stand
+aside while it's showing.</li>
+<li><b>Hold window:</b> keep directional theses inside ~10–21 days per the backtest. For
+30–60 DTE premium selling, lean on S3 + rich vol, not directional S1/S2.</li>
+</ul>
+
+<h2>ASX / India tabs — long-only directional</h2>
+<p>No options, no shorting (matches the accounts these trade in). Each hit is tagged a single
+<b>Action</b> from weekly trend × trigger direction:</p>
+<table><tr><th>Weekly trend</th><th>Bullish trigger</th><th>No trigger (chop)</th><th>Bearish trigger</th></tr>
+<tr><td><b>Up</b></td><td class="pos">BUY (add)</td><td>HOLD</td><td class="neg">REDUCE (trim)</td></tr>
+<tr><td><b>Flat</b></td><td class="pos">BUY (small)</td><td class="neu">WATCH</td><td class="neu">AVOID</td></tr>
+<tr><td><b>Down</b></td><td class="neu">WATCH (risky bounce)</td><td class="neu">AVOID</td><td class="neg"><b>EXIT (get out)</b></td></tr>
+</table>
+<p>Green = add/hold long · amber = reduce/avoid/watch · red = <b>EXIT</b>. Conservative by
+design — a bullish reversal inside a downtrend is WATCH, not BUY.</p>
+<ul>
+<li><b>India:</b> EXIT/REDUCE flags are backtest-validated (strengthen with horizon — treat as
+underweight-for-months once triggered). S2 BUY rows carry the <b>position</b> exit template
+(stop 3.5×ATR / target 4.5×ATR / 63-bar time exit) — these are the app's one confirmed
+multi-week directional edge.</li>
+<li><b>ASX:</b> no measured timing edge at any horizon — treat hits as a curated watchlist,
+cross-reference your own TWS holdings before acting (this is a screen, not position-aware).</li>
+</ul>
+
+<h2>Score, Rank, RS</h2>
+<ul>
+<li><b>Score</b> (0–1) — a heuristic composite from each rule's own inputs (pattern strength,
+trend alignment, volume, etc). <b>Not shown to be predictive</b> in the 5y backtest (score
+deciles are flat/inverted) — use it to compare candidates within one rule, not as a
+confidence number.</li>
+<li><b>Rank</b> — score's percentile within its own rule (0–100), so S1/S2/S3 hits sort
+together fairly in one list. Same caveat as Score.</li>
+<li><b>RS</b> — 63-day return vs the market benchmark (SPY/^AXJO/^NSEI), percentile across the
+scanned universe. Weak backtest support in the US (rs≤30 underperforms, t≈−1.8–3.0) — the
+most defensible of the three ranking columns, still a tiebreak rather than a standalone signal.</li>
+</ul>
+
+<h2>Stop / Tgt / time_exit</h2>
+<p>Every hit carries a suggested stop, target, and time exit, sized from the backtest's
+MAE/MFE distributions:</p>
+<ul>
+<li><b>Standard (swing) template</b> — all US/ASX hits, and India S1/S2-short: stop 2.0×ATR,
+target 1.5×ATR, 10-bar time exit.</li>
+<li><b>India S2-long (position) template</b> — stop 3.5×ATR, target 4.5×ATR, 63-bar time exit.</li>
+<li><b>S3 (neutral)</b> — stop/target show the range low/high as condor short-strike references.</li>
+</ul>
+
+<h2>Running a scan</h2>
+<p>Scans run locally (Python + TWS/yfinance) and push a JSON snapshot the dashboard reads.
+One-click runners: <code>run_scan.bat</code> (US), <code>run_scan_live.bat</code> (US, last-hour
+real-time, local-only), <code>run_scan_asx.bat</code>, <code>run_scan_india.bat</code>. The
+cloud Action refreshes all three markets daily. <code>run_backtest.bat</code> regenerates the
+event-study reports behind the Backtest tab.</p>
+</div>
+
 <script>
 const $ = s => document.querySelector(s);
 const SUF = {us:"", asx:"_asx", in:"_in"};
@@ -291,10 +437,26 @@ async function initSnaps(){
     sel.onchange=()=>load(sel.value);
   }catch(e){}
 }
+function toggleView(m){
+  const isRef = (m==="backtest" || m==="guide");
+  $(".bar").style.display = isRef ? "none" : "flex";
+  $("#t").style.display = isRef ? "none" : "table";
+  $("#state").style.display = "none";
+  $("#banner").style.display = "none";
+  $("#gen").textContent = isRef ? "" : $("#gen").textContent;
+  $("#backtestPanel").style.display = (m==="backtest") ? "block" : "none";
+  $("#guidePanel").style.display = (m==="guide") ? "block" : "none";
+  return isRef;
+}
 async function selectMarket(m){
   market=m;
   document.querySelectorAll(".tabs button[data-m]").forEach(b=>b.classList.toggle("on", b.dataset.m===m));
   filt="all";
+  if(toggleView(m)){
+    $("#title").textContent = "PRICE-ACTION SCAN — " + (m==="backtest" ? "Backtest reference" : "Guide");
+    $("#counts").textContent = "";
+    return;
+  }
   await initSnaps();
   await load("latest");
 }
