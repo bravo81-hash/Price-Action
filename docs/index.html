@@ -38,7 +38,7 @@
  tr:hover td{background:#1c2230}
  .tag{padding:1px 7px;border-radius:4px;font-size:11px;font-weight:600}
  .s1{background:#1f6feb33;color:#79c0ff} .s2{background:#a371f733;color:#d2a8ff}
- .s3{background:#8b949e33;color:#c9d1d9}
+ .s3{background:#8b949e33;color:#c9d1d9} .s4{background:#2ea04333;color:#7ee787}
  .long{color:var(--grn)} .short{color:var(--red)}
  .bullish{color:var(--grn)} .bearish{color:var(--red)} .neutral{color:var(--mut)}
  .src{color:var(--mut);font-size:10px;text-transform:uppercase}
@@ -117,6 +117,15 @@ markets. Full per-slice tables live in <code>backtest/report_&lt;mkt&gt;.md</cod
 <li>Remains a curated candidate screen on the standard 10-bar swing template — treat hits as watchlist generation, not a timing edge.</li>
 </ul></div>
 
+<div class="card"><b class="mkt">Candidate study</b> — five documented-anomaly setups tested
+(promotion bar pre-registered: |t|≥2.5 at two adjacent horizons, or ≥2.0 replicated US+ASX):
+<ul>
+<li><span class="pos">OSMR promoted → live rule S4</span>: oversold snapback in uptrend. US 5d excess +0.38% (t=3.44), ASX +0.34% (t=2.13), ASX persistence to 63d (t=2.31). Shallowest MAE of all candidates.</li>
+<li><span class="neu">PBEMA near-miss</span> (US 63d t=2.33, ASX 1.65 — below bar): parked in candidates.py for a future out-of-sample re-test.</li>
+<li><span class="neg">NH52, HVOL, GAPD failed</span>; candidate shorts were harmful everywhere (US all-shorts t=−3.9) — no short setups added.</li>
+<li>RS≥70 conditioning replicated in both markets (t=2.26 / 1.96), reinforcing the RS layer.</li>
+</ul></div>
+
 <div class="card"><b>Kept vs. changed</b> (round-1 and round-2 decisions from the 2y and 5y runs):
 <ul>
 <li><b>Kept:</b> S1 shorts (2y "collapse" was baseline drift, not a real effect — 5y side-matched shows |t|&lt;0.8); India S2 (null, not negative — still generates candidates); score/rank as organizers.</li>
@@ -141,6 +150,10 @@ tags the zone — a rally poking above resistance does not count as "support."</
 <td>Weekly trend (EMA-based) pulls back, then the daily close breaks the 7-day Donchian
 channel with volume confirmation. Must be fresh (≤1 bar old) and not already extended
 &gt;1.5 ATR past the trigger — stale, chased breakouts are excluded.</td></tr>
+<tr><td><b>S4</b></td><td>Oversold snapback</td>
+<td>Long-only mean reversion: name above its 200SMA flushed hard (RSI(3) &lt; 15, two consecutive
+down closes) tends to bounce within ~5 bars. Backtest-promoted (US 5d t=3.44, replicated ASX
+t=2.13) — the only directional setup in the app that cleared the promotion bar. 5-bar time exit.</td></tr>
 <tr><td><b>S3</b></td><td>Range / chop (neutral)</td>
 <td>Low ADX, flat weekly EMAs, price mid-range, no boundary-pressing closes (which would mean
 coiling, not chopping). Validated in the backtest as genuine low-realized-move selection in
@@ -234,10 +247,10 @@ const HEAD = {
     ["dist","Dist/Brk(ATR)","num"],["age","Age","num"],["stop","Stop","num"],["tgt","Tgt","num"],["detail","Detail"],["","Chart"]]
 };
 const FILTERS = {
-  options:[["all","All"],["S1","S1 reversal"],["S2","S2 breakout"],["S3","S3 chop"],
+  options:[["all","All"],["S1","S1 reversal"],["S2","S2 breakout"],["S3","S3 chop"],["S4","S4 snapback"],
     ["long","Long"],["short","Short"],["neutral","Neutral"],["rs","RS>50"],["ern","Ern OK"]],
   directional:[["all","All"],["buy","Buy"],["hold","Hold"],["exit","Exit / Trim"],
-    ["avoid","Avoid / Watch"],["S1","S1"],["S2","S2"],["S3","S3"],["rs","RS>50"]]
+    ["avoid","Avoid / Watch"],["S1","S1"],["S2","S2"],["S3","S3"],["S4","S4"],["rs","RS>50"]]
 };
 
 function dispSym(t){ return MODE==="options" ? t : t.replace(/\.(AX|NS)$/,''); }
@@ -371,7 +384,7 @@ function rowHTML(r){
 function passes(r){
   if(q && !dispSym(r.ticker).toLowerCase().includes(q) && !r.ticker.toLowerCase().includes(q)) return false;
   if(filt==="all") return true;
-  if(filt==="S1"||filt==="S2"||filt==="S3") return r.signal===filt;
+  if(filt==="S1"||filt==="S2"||filt==="S3"||filt==="S4") return r.signal===filt;
   if(filt==="rs") return r.rs_pct!=null && r.rs_pct>50;
   if(filt==="ern") return r.ern==null || r.ern>ERNWARN;
   if(MODE==="directional"){

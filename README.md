@@ -231,6 +231,16 @@ and raw `events_<mkt>.csv`.
 - First-fire events only (10-bar cooldown per ticker+rule+side); entries are
   next-day-close-agnostic (event-study convention: signal-bar close to t+h close).
 
+## S4 — Oversold snapback (promoted candidate)
+
+The one candidate that cleared the promotion bar, now a live rule in all
+markets: **long-only**, close above the 200SMA, RSI(3) < 15, two consecutive
+down closes. Evidence: US 5d excess +0.38% (t=3.44), replicated ASX (t=2.13),
+ASX persistence to 63d (t=2.31); shallowest MAE of all candidates. Edge decays
+past ~10d, so S4 rows carry a **5-bar time exit** (`s4_time_bars`) with the
+standard 2.0/1.5 ATR stop/target. No short mirror — candidate shorts were
+harmful in every market (US all-shorts t=−3.9).
+
 ## Candidate setups (experimental, backtest-only)
 
 `pa_scanner/candidates.py` holds five directional-setup candidates being
@@ -247,9 +257,9 @@ high + volume), **HVOL** (>=3x-volume day premium, both sides), **GAPD**
 (>=1-ATR gap held into the close, PEAD proxy, both sides), **OSMR** (RSI(3)
 oversold snapback above the 200SMA), **PBEMA** (6-month momentum leader, first
 20-EMA touch). Promotion bar (pre-registered): |t| >= 2.5 at two adjacent
-horizons with consistent sign, or >= 2.0 replicated across US and ASX. Winners
-get promoted into rules.py with exit templates from their MAE/MFE; losers get
-deleted.
+horizons with consistent sign, or >= 2.0 replicated across US and ASX. Study verdicts (5y, side-matched): **OSMR promoted -> live rule S4**;
+PBEMA near-miss (US 63d t=2.33, ASX 1.65) parked for out-of-sample re-test;
+NH52/HVOL/GAPD failed; all candidate shorts harmful (US t=-3.9).
 
 ## Configuration
 

@@ -189,3 +189,32 @@ class RangeChopNeutral:
                        "range_pos": round(ctx.range_pos, 2), "adx": round(ctx.adx_last, 1),
                        "width_pct": round(ctx.range_width_pct * 100, 1),
                        "crosses": ctx.range_crosses})
+
+
+@register
+class OversoldSnapback:
+    """Promoted candidate OSMR (5y study: US 5d excess +0.38%, t=3.44;
+    replicated ASX t=2.13; persists in ASX to 63d). Long-only mean reversion:
+    an uptrend name (above its 200SMA) hit by a sharp multi-day flush
+    (RSI(3) < 15, two consecutive down closes) tends to snap back within
+    ~5 bars. No short mirror - candidate shorts were harmful everywhere.
+    """
+    code = "S4"
+    name = "Oversold snapback"
+
+    def evaluate(self, ctx) -> Signal:
+        from .config import CFG
+        if not CFG.allow_long:
+            return Signal(False, None, 0.0, "")
+        if ctx.sma200 is None or ctx.rsi3 is None or ctx.atr_last <= 0:
+            return Signal(False, None, 0.0, "")
+        if ctx.last_close <= ctx.sma200:
+            return Signal(False, None, 0.0, "")
+        if ctx.rsi3 >= CFG.s4_rsi_max or not ctx.down2:
+            return Signal(False, None, 0.0, "")
+        score = _clip01(0.55 + (CFG.s4_rsi_max - ctx.rsi3) / 100.0)
+        return Signal(True, "long", score,
+                      f"RSI3 {ctx.rsi3:.0f} snapback above 200SMA",
+                      {"level": round(ctx.sma200, 2),
+                       "rsi3": round(ctx.rsi3, 1),
+                       "dist_atr": round((ctx.last_close - ctx.sma200) / ctx.atr_last, 2)})

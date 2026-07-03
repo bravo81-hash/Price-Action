@@ -119,6 +119,10 @@ class Config:
     earnings_enrich: bool = True       # US: annotate days-to-earnings on hits (yfinance)
     earnings_warn_days: int = 10       # <= this many days = warn tint / filter
 
+    # --- S4: oversold snapback (promoted candidate OSMR; US 5d t=3.44, ASX t=2.13) ---
+    s4_rsi_max: float = 15.0           # RSI(3) must be below this
+    s4_time_bars: int = 5              # edge decays past ~10d; exit fast
+
     # --- exit templates (from the 5y MAE/MFE study: med MAE ~ -3.4%) ---
     exit_stop_atr: float = 2.0         # protective stop distance (x ATR)
     exit_target_atr: float = 1.5       # first target distance (x ATR)

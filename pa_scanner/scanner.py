@@ -52,6 +52,10 @@ class SymbolContext:
     s2_age_up: Optional[int] = None   # bars since the last close-above-donchian cross
     s2_age_dn: Optional[int] = None
     s3_edge_closes: int = 0         # of the last 3 closes, how many sit at a range boundary
+    # --- S4 oversold snapback context ---
+    sma200: Optional[float] = None  # 200d simple MA (None until 200 bars)
+    rsi3: Optional[float] = None    # Wilder RSI(3)
+    down2: bool = False             # two consecutive down closes into today
 
 
 def _clip01(x):
@@ -151,6 +155,12 @@ def prepare_context(ticker, daily, weekly):
     prior = c.iloc[-(ab + 1):-1]
     prior_med = float(prior.median()) if len(prior) else float(last["close"])
 
+    # S4 oversold-snapback context
+    sma200_s = c.rolling(200).mean()
+    sma200_v = float(sma200_s.iloc[-1]) if not np.isnan(sma200_s.iloc[-1]) else None
+    rsi3_v = float(ind.rsi(c, 3).iloc[-1])
+    down2_v = bool(len(c) >= 3 and c.iloc[-1] < c.iloc[-2] < c.iloc[-3])
+
     # S3 range / chop metrics
     price = float(last["close"])
     adx_s, _, _ = ind.adx(d)
@@ -186,6 +196,7 @@ def prepare_context(ticker, daily, weekly):
         last_low=float(last["low"]), last_high=float(last["high"]),
         prior_med=prior_med, s2_age_up=age_up, s2_age_dn=age_dn,
         s3_edge_closes=s3_edge_closes,
+        sma200=sma200_v, rsi3=rsi3_v, down2=down2_v,
     )
 
 
@@ -335,7 +346,12 @@ def add_exit_levels(rows, market="us"):
         else:  # neutral: condor short-strike references
             r["stop"] = r.get("range_lo")
             r["tgt"] = r.get("range_hi")
-        r["time_exit"] = CFG.in_pos_time_bars if position else CFG.exit_time_bars
+        if position:
+            r["time_exit"] = CFG.in_pos_time_bars
+        elif r.get("signal") == "S4":
+            r["time_exit"] = CFG.s4_time_bars
+        else:
+            r["time_exit"] = CFG.exit_time_bars
     return rows
 
 

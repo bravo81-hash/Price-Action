@@ -116,6 +116,10 @@ def _daily_arrays(d):
     A["pdi"], A["mdi"] = np.nan_to_num(pdi.to_numpy()), np.nan_to_num(mdi.to_numpy())
     A["vol_avg"] = v.rolling(CFG.s2_vol_window).mean().shift(1).to_numpy()
     A["prior_med"] = c.rolling(CFG.s1_approach_bars).median().shift(1).to_numpy()
+    A["sma200"] = c.rolling(200).mean().to_numpy()
+    A["rsi3"] = ind.rsi(c, 3).to_numpy()
+    dn1 = (c < c.shift(1))
+    A["down2"] = (dn1 & dn1.shift(1).fillna(False)).to_numpy()
 
     # donchian cross ages
     ok_hi = don_hi.notna() & don_hi.shift(1).notna()
@@ -224,6 +228,9 @@ def ctx_at(ticker, d, A, WT, t):
         s2_age_up=(au if 0 <= au <= MAX_AGE_SCAN else None),
         s2_age_dn=(ad if 0 <= ad <= MAX_AGE_SCAN else None),
         s3_edge_closes=edge_closes,
+        sma200=(float(A["sma200"][t]) if not np.isnan(A["sma200"][t]) else None),
+        rsi3=float(A["rsi3"][t]),
+        down2=bool(A["down2"][t]),
     )
 
 

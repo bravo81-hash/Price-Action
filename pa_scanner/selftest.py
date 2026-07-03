@@ -480,6 +480,51 @@ def main():
               all(k in r1["events"][0] for k in ("rs_pct", "vol_state", "bench", "mae", "mfe"))
               or r1["events"][0]["side"] == "neutral")
 
+    print("S4 oversold snapback (promoted)")
+    from .rules import OversoldSnapback
+    s4_ok = neutral_ctx(last_close=105.0, atr_last=2.0, sma200=100.0, rsi3=8.0, down2=True)
+    r4 = OversoldSnapback().evaluate(s4_ok)
+    check("S4 fires above 200SMA with RSI3<15 + down streak", r4.hit and r4.side == "long")
+    check("S4 score scales with oversold depth",
+          OversoldSnapback().evaluate(neutral_ctx(last_close=105.0, atr_last=2.0,
+              sma200=100.0, rsi3=3.0, down2=True)).score > r4.score)
+    check("S4 blocked below 200SMA", not OversoldSnapback().evaluate(
+        neutral_ctx(last_close=95.0, atr_last=2.0, sma200=100.0, rsi3=8.0, down2=True)).hit)
+    check("S4 blocked when RSI3 high", not OversoldSnapback().evaluate(
+        neutral_ctx(last_close=105.0, atr_last=2.0, sma200=100.0, rsi3=40.0, down2=True)).hit)
+    check("S4 blocked without down streak", not OversoldSnapback().evaluate(
+        neutral_ctx(last_close=105.0, atr_last=2.0, sma200=100.0, rsi3=8.0, down2=False)).hit)
+    check("S4 blocked before 200 bars (sma200 None)", not OversoldSnapback().evaluate(
+        neutral_ctx(last_close=105.0, atr_last=2.0, sma200=None, rsi3=8.0, down2=True)).hit)
+    check("RSI oversold on down tape", float(ind.rsi(pd.Series(
+        [100 - i for i in range(30)]), 3).iloc[-1]) < 5)
+    check("RSI overbought on up tape", float(ind.rsi(pd.Series(
+        [100 + i for i in range(30)]), 3).iloc[-1]) > 95)
+
+    s4x = [{"side": "long", "signal": "S4", "last": 100.0, "atr": 2.0}]
+    add_exit_levels(s4x, market="us")
+    check("S4 carries 5-bar time exit", s4x[0]["time_exit"] == CFG.s4_time_bars
+          and s4x[0]["stop"] == 96.0)
+
+    # parity incl. S4-capable history (280 bars, uptrend + terminal flush)
+    def s4_frame(n=280, seed=5):
+        rng = np.random.default_rng(seed)
+        c = 100.0 + 0.12 * np.arange(n) + rng.normal(0, 0.15, n).cumsum()
+        c[-3:] = c[-4] - np.array([1.0, 2.2, 3.5])
+        o = c + 0.1
+        idx = pd.bdate_range("2021-06-01", periods=n)
+        return pd.DataFrame({"open": o, "high": np.maximum(o, c) + 0.4,
+                             "low": np.minimum(o, c) - 0.4, "close": c,
+                             "volume": np.full(n, 2e6)}, index=idx)
+
+    sf = s4_frame()
+    sb4 = {"S4T": (sf, dl.to_weekly(sf))}
+    chk4, mism4 = verify_parity(sb4, n=40, seed=9)
+    check("parity holds with S4 context fields", chk4 >= 20 and len(mism4) == 0)
+    from .scanner import scan as _scan
+    s4rows = [r for r in _scan(sb4) if r["signal"] == "S4"]
+    check("S4 fires end-to-end in scan()", len(s4rows) == 1 and s4rows[0]["side"] == "long")
+
     print("candidate setups (experimental)")
     from pa_scanner import candidates as cnds
 

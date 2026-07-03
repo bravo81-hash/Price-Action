@@ -100,6 +100,7 @@ _FILTERS_OPTIONS = """
   <button data-f="S1">S1 reversal</button>
   <button data-f="S2">S2 breakout</button>
   <button data-f="S3">S3 chop</button>
+  <button data-f="S4">S4 snapback</button>
   <button data-f="long">Long</button>
   <button data-f="short">Short</button>
   <button data-f="neutral">Neutral</button>
@@ -115,6 +116,7 @@ _FILTERS_DIRECTIONAL = """
   <button data-f="S1">S1</button>
   <button data-f="S2">S2</button>
   <button data-f="S3">S3</button>
+  <button data-f="S4">S4</button>
   <button data-f="rs">RS&gt;50</button>"""
 
 
@@ -151,7 +153,7 @@ _TEMPLATE = """<!doctype html>
  tr:hover td{background:#1c2230}
  .tag{padding:1px 7px;border-radius:4px;font-size:11px;font-weight:600}
  .s1{background:#1f6feb33;color:#79c0ff} .s2{background:#a371f733;color:#d2a8ff}
- .s3{background:#8b949e33;color:#c9d1d9}
+ .s3{background:#8b949e33;color:#c9d1d9} .s4{background:#2ea04333;color:#7ee787}
  .long{color:var(--grn)} .short{color:var(--red)}
  .bullish{color:var(--grn)} .bearish{color:var(--red)} .neutral{color:var(--mut)}
  .src{color:var(--mut);font-size:10px;text-transform:uppercase}
@@ -293,7 +295,7 @@ function rowHTML(r){
 function passes(r){
   if(q && !dispSym(r.ticker).toLowerCase().includes(q) && !r.ticker.toLowerCase().includes(q)) return false;
   if(filt==="all") return true;
-  if(filt==="S1"||filt==="S2"||filt==="S3") return r.signal===filt;
+  if(filt==="S1"||filt==="S2"||filt==="S3"||filt==="S4") return r.signal===filt;
   if(filt==="rs") return r.rs_pct!=null && r.rs_pct>50;
   if(filt==="ern") return r.ern==null || r.ern>__ERNWARN__;
   if(MODE==="directional"){

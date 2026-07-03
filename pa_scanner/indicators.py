@@ -90,3 +90,16 @@ def pct_rank(series: pd.Series, lookback: int) -> float:
         return float("nan")
     last = s.iloc[-1]
     return float((s < last).mean() * 100)
+
+
+def rsi(closes, n=3):
+    """Wilder RSI, causal (ewm alpha=1/n from bar 0). NaN-safe -> 50 during warmup."""
+    delta = closes.diff().fillna(0.0)
+    up = delta.clip(lower=0.0)
+    dn = (-delta).clip(lower=0.0)
+    au = up.ewm(alpha=1.0 / n, adjust=False).mean()
+    ad = dn.ewm(alpha=1.0 / n, adjust=False).mean()
+    out = 100.0 - 100.0 / (1.0 + au / ad)
+    out = out.where(ad > 0, 100.0)          # pure-up tape
+    out = out.where((au > 0) | (ad > 0), 50.0)
+    return out.fillna(50.0)
