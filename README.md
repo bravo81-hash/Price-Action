@@ -231,6 +231,26 @@ and raw `events_<mkt>.csv`.
 - First-fire events only (10-bar cooldown per ticker+rule+side); entries are
   next-day-close-agnostic (event-study convention: signal-bar close to t+h close).
 
+## Candidate setups (experimental, backtest-only)
+
+`pa_scanner/candidates.py` holds five directional-setup candidates being
+evaluated to replace the null US/ASX directional edge. None run in the live
+scanner. Test with:
+
+```bash
+python -m pa_scanner.backtest --market us  --candidates --horizons 5 10 21 42 63 --cooldown 21
+python -m pa_scanner.backtest --market asx --candidates --horizons 5 10 21 42 63 --cooldown 21
+```
+
+Outputs `backtest/report_<mkt>_cand.md`. Candidates: **NH52** (fresh 52-week
+high + volume), **HVOL** (>=3x-volume day premium, both sides), **GAPD**
+(>=1-ATR gap held into the close, PEAD proxy, both sides), **OSMR** (RSI(3)
+oversold snapback above the 200SMA), **PBEMA** (6-month momentum leader, first
+20-EMA touch). Promotion bar (pre-registered): |t| >= 2.5 at two adjacent
+horizons with consistent sign, or >= 2.0 replicated across US and ASX. Winners
+get promoted into rules.py with exit templates from their MAE/MFE; losers get
+deleted.
+
 ## Configuration
 
 All knobs live in `pa_scanner/config.py` (`CFG`). Key ones:

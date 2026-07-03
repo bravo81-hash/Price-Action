@@ -249,6 +249,22 @@ def events_for_ticker(ticker, d, weekly, max_h):
     return out, A
 
 
+def candidate_events_for_ticker(ticker, d, max_h):
+    """Experimental-setup replay (pa_scanner.candidates); same event schema."""
+    from . import candidates as cnds
+    P = cnds.prep_arrays(d)
+    out = []
+    for t in range(cnds.WARMUP, len(d) - max_h):
+        for c in cnds.CANDIDATES:
+            hit = c.check(P, t)
+            if hit:
+                side, score, meta = hit
+                out.append({"ticker": ticker, "t": t, "date": d.index[t],
+                            "signal": c.code, "side": side, "score": score,
+                            "trend": "na", **meta})
+    return out, P
+
+
 def verify_parity(bundle, n=120, seed=11):
     """Replay ctx vs live prepare_context on prefix slices -> mismatch list."""
     rng = random.Random(seed)
@@ -426,12 +442,14 @@ def _bucket(events, key):
 
 
 def run_backtest(bundle, market="us", bench_daily=None, horizons=(1, 3, 5, 10),
-                 cooldown=10, seed=7, out_dir="backtest", verbose=True):
+                 cooldown=10, seed=7, out_dir="backtest", verbose=True,
+                 use_candidates=False):
     max_h = max(horizons)
     raw, arrs = [], {}
     for tk, (d, wk) in bundle.items():
         try:
-            ev, A = events_for_ticker(tk, d, wk, max_h)
+            ev, A = (candidate_events_for_ticker(tk, d, max_h) if use_candidates
+                     else events_for_ticker(tk, d, wk, max_h))
             raw.extend(ev)
             arrs[tk] = A
         except Exception as ex:
@@ -473,7 +491,8 @@ def run_backtest(bundle, market="us", bench_daily=None, horizons=(1, 3, 5, 10),
 
     hz = f"ret{max_h}"
     sb = {f"ret{h}": _side_base(base, f"ret{h}") for h in horizons}
-    lines = [f"# Backtest — {MARKETS[market]['label']}  ({dt.date.today()})",
+    tag = "Backtest CANDIDATES" if use_candidates else "Backtest"
+    lines = [f"# {tag} — {MARKETS[market]['label']}  ({dt.date.today()})",
              f"events {len(events)} · baseline {len(base)} · horizons {list(horizons)} "
              f"· cooldown {cooldown} · vol-state = rv-proxy · baselines side-matched", ""]
 
@@ -530,7 +549,8 @@ def run_backtest(bundle, market="us", bench_daily=None, horizons=(1, 3, 5, 10),
                      f"(lower = better for premium selling)\n")
 
     # MAE/MFE for stop placement
-    for code in ("S1", "S2"):
+    codes = ("NH52", "HVOL", "GAPD", "OSMR", "PBEMA") if use_candidates else ("S1", "S2")
+    for code in codes:
         evs = [e for e in dir_ev if e["signal"] == code]
         if evs:
             mae = _stats([e.get("mae") for e in evs])
@@ -539,10 +559,11 @@ def run_backtest(bundle, market="us", bench_daily=None, horizons=(1, 3, 5, 10),
                          f"med {mae.get('med')}% · MFE mean {mfe.get('mean')}% med {mfe.get('med')}%\n")
 
     os.makedirs(out_dir, exist_ok=True)
-    md = os.path.join(out_dir, f"report_{market}.md")
+    suf = "_cand" if use_candidates else ""
+    md = os.path.join(out_dir, f"report_{market}{suf}.md")
     with open(md, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
-    csvp = os.path.join(out_dir, f"events_{market}.csv")
+    csvp = os.path.join(out_dir, f"events_{market}{suf}.csv")
     pd.DataFrame(events).to_csv(csvp, index=False)
     if verbose:
         print("\n".join(lines))
@@ -558,6 +579,8 @@ def main():
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--horizons", nargs="+", type=int, default=[1, 3, 5, 10])
     ap.add_argument("--cooldown", type=int, default=10)
+    ap.add_argument("--candidates", action="store_true",
+                    help="run the EXPERIMENTAL candidate setups (candidates.py) instead of the live rules")
     ap.add_argument("--verify", type=int, default=0,
                     help="run N parity checks (replay vs live scanner) before the study")
     ap.add_argument("--period", default=None,
@@ -587,8 +610,12 @@ def main():
         if mism:
             print("[bt] WARNING: replay diverges from live scanner; results suspect")
 
+    if a.candidates:
+        print("[bt] CANDIDATE study (experimental setups; promotion bar |t|>=2.5 "
+              "at two adjacent horizons, or >=2.0 replicated US+ASX)")
     run_backtest(bundle, market=a.market, bench_daily=bench,
-                 horizons=tuple(a.horizons), cooldown=a.cooldown, out_dir=a.out)
+                 horizons=tuple(a.horizons), cooldown=a.cooldown, out_dir=a.out,
+                 use_candidates=a.candidates)
 
 
 if __name__ == "__main__":

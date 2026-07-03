@@ -432,6 +432,7 @@ def main():
     check("US S2 long stays swing template", us[0]["time_exit"] == CFG.exit_time_bars)
 
     print("backtest harness")
+    import tempfile
     from .backtest import verify_parity, run_backtest, _dedup, _fwd
     bnd = {"UP": (make_s2("long"), dl.to_weekly(make_s2("long"))),
            "DN": (make_s2("short"), dl.to_weekly(make_s2("short"))),
@@ -454,7 +455,6 @@ def main():
     evs = _fwd({"ticker": "X", "t": 2, "side": "short"}, fa, (2,), 2)
     check("fwd return math (short, signed)", evs["ret2"] == -20.0)
 
-    import tempfile
     with tempfile.TemporaryDirectory() as td:
         r1 = run_backtest(bnd, market="asx", bench_daily=make_range(),
                           horizons=(3, 5, 10), out_dir=td, verbose=False)
@@ -479,6 +479,77 @@ def main():
         check("events carry rs/vol/bench annotations",
               all(k in r1["events"][0] for k in ("rs_pct", "vol_state", "bench", "mae", "mfe"))
               or r1["events"][0]["side"] == "neutral")
+
+    print("candidate setups (experimental)")
+    from pa_scanner import candidates as cnds
+
+    def cframe(n=340, drift=0.0, seed=1):
+        rng = np.random.default_rng(seed)
+        c = 100.0 + drift * np.arange(n) + rng.normal(0, 0.05, n).cumsum()
+        o = c + rng.normal(0, 0.05, n)
+        h = np.maximum(o, c) + 0.5
+        lo_ = np.minimum(o, c) - 0.5
+        idx = pd.bdate_range("2021-01-04", periods=n)
+        return pd.DataFrame({"open": o, "high": h, "low": lo_, "close": c,
+                             "volume": np.full(n, 2e6)}, index=idx)
+
+    ctrl = cframe()
+    Pc = cnds.prep_arrays(ctrl)
+    check("candidates: control frame fires nothing",
+          all(cd.check(Pc, len(ctrl) - 1) is None for cd in cnds.CANDIDATES))
+
+    d = cframe()
+    d.iloc[-1, d.columns.get_loc("close")] = d["close"].max() * 1.03
+    d.iloc[-1, d.columns.get_loc("high")] = d["close"].iloc[-1] + 0.5
+    d.iloc[-1, d.columns.get_loc("volume")] = 4e6
+    r = cnds.NH52().check(cnds.prep_arrays(d), len(d) - 1)
+    check("NH52 fires on fresh 252d high + volume", r is not None and r[0] == "long")
+
+    d = cframe(); d.iloc[-1, d.columns.get_loc("volume")] = 9e6
+    d.iloc[-1, d.columns.get_loc("close")] = d["close"].iloc[-2] * 1.01
+    check("HVOL long on 4x-vol up close",
+          (cnds.HVOL().check(cnds.prep_arrays(d), len(d) - 1) or ("",))[0] == "long")
+    d.iloc[-1, d.columns.get_loc("close")] = d["close"].iloc[-2] * 0.99
+    check("HVOL short on 4x-vol down close",
+          (cnds.HVOL().check(cnds.prep_arrays(d), len(d) - 1) or ("",))[0] == "short")
+
+    d = cframe()
+    atrv = ind.atr(d).iloc[-1]; prev = d["close"].iloc[-2]
+    d.iloc[-1, d.columns.get_loc("open")] = prev + 1.5 * atrv
+    d.iloc[-1, d.columns.get_loc("close")] = prev + 1.7 * atrv
+    d.iloc[-1, d.columns.get_loc("high")] = prev + 1.9 * atrv
+    d.iloc[-1, d.columns.get_loc("low")] = prev + 1.4 * atrv
+    d.iloc[-1, d.columns.get_loc("volume")] = 7e6
+    check("GAPD long on held 1.5-ATR gap",
+          (cnds.GAPD().check(cnds.prep_arrays(d), len(d) - 1) or ("",))[0] == "long")
+
+    d = cframe(drift=0.15)
+    for k, off in ((3, 0.0), (2, 1.5), (1, 3.0)):
+        d.iloc[-k, d.columns.get_loc("close")] = d["close"].iloc[-4] - 1.0 - off
+    check("OSMR long on RSI3 oversold in uptrend",
+          (cnds.OSMR().check(cnds.prep_arrays(d), len(d) - 1) or ("",))[0] == "long")
+
+    d = cframe(drift=0.5)
+    e20f = ind.ema(d["close"], 20).iloc[-1]
+    d.iloc[-1, d.columns.get_loc("low")] = e20f - 0.2
+    check("PBEMA long on momentum-leader EMA touch",
+          (cnds.PBEMA().check(cnds.prep_arrays(d), len(d) - 1) or ("",))[0] == "long")
+
+    # e2e candidate study on synthetic
+    from .backtest import candidate_events_for_ticker
+    dd = cframe(n=400, drift=0.15, seed=2)
+    for k, off in ((13, 0.0), (12, 1.5), (11, 3.0)):
+        dd.iloc[-k, dd.columns.get_loc("close")] = dd["close"].iloc[-14] - 1.0 - off
+    cev, _ = candidate_events_for_ticker("SYN", dd, 10)
+    check("candidate replay emits events", len(cev) > 0
+          and all(k in cev[0] for k in ("signal", "side", "score", "t")))
+    with tempfile.TemporaryDirectory() as td2:
+        cb = {"SYN": (dd, dl.to_weekly(dd))}
+        rc = run_backtest(cb, market="us", bench_daily=make_range(),
+                          horizons=(3, 5, 10), out_dir=td2, verbose=False,
+                          use_candidates=True)
+        check("candidate report written with _cand suffix",
+              rc["report"].endswith("report_us_cand.md") and os.path.exists(rc["report"]))
 
     print(f"\n{len(PASS)} passed, {len(FAIL)} failed")
     if FAIL:
