@@ -440,6 +440,18 @@ def main():
               len(r1["events"]) > 0 and os.path.exists(r1["report"]) and os.path.exists(r1["csv"]))
         check("baseline is seed-deterministic",
               [b["t"] for b in r1["baseline"]] == [b["t"] for b in r2["baseline"]])
+        from .backtest import _matched, _side_base
+        sbase = _side_base(r1["baseline"], "ret10")
+        longs = [e for e in r1["events"] if e["side"] == "long"]
+        if len(longs) >= 3:
+            ex, tv = _matched(longs, "ret10", sbase)
+            check("side-matched excess computes", ex is not None and tv is not None)
+        synth_b = _side_base([{"side": "long", "ret10": 1.0}] * 50 +
+                             [{"side": "short", "ret10": -1.0}] * 50, "ret10")
+        se, st_ = _matched([{"side": "short", "ret10": -1.0}] * 20, "ret10", synth_b)
+        check("short events vs short baseline = zero excess", se == 0.0)
+        check("evening_star retired from bearish triggers",
+              "evening_star" not in cnd.BEARISH)
         check("events carry rs/vol/bench annotations",
               all(k in r1["events"][0] for k in ("rs_pct", "vol_state", "bench", "mae", "mfe"))
               or r1["events"][0]["side"] == "neutral")

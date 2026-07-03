@@ -375,6 +375,40 @@ def _stats(rets):
             "win": round(100 * (a > 0).mean(), 1), "sd": round(a.std(ddof=1), 3) if len(a) > 1 else 0.0}
 
 
+def _side_base(base, horizon):
+    return {sd: [b[horizon] for b in base if b["side"] == sd] for sd in ("long", "short")}
+
+
+def _matched(evs, horizon, sb):
+    """(excess%, t) of directional events vs a side-weighted baseline.
+
+    A mixed baseline overstates short-side losses by the market's drift, so the
+    reference mean is the side-composition-weighted mixture of the long-only
+    and short-only baseline samples.
+    """
+    evs = [e for e in evs if e.get("side") in ("long", "short")
+           and e.get(horizon) is not None]
+    a = np.array([e[horizon] for e in evs], float)
+    if len(a) < 3:
+        return None, None
+    n = len(a)
+    mean_b, var_term = 0.0, 0.0
+    for sd in ("long", "short"):
+        k = sum(1 for e in evs if e["side"] == sd)
+        if k == 0:
+            continue
+        b = np.array(sb[sd], float)
+        if len(b) < 3:
+            return None, None
+        w = k / n
+        mean_b += w * b.mean()
+        var_term += (w ** 2) * b.var(ddof=1) / len(b)
+    ex = float(a.mean() - mean_b)
+    se = np.sqrt(a.var(ddof=1) / n + var_term)
+    t = float((a.mean() - mean_b) / se) if se > 0 else None
+    return round(ex, 3), (round(t, 2) if t is not None else None)
+
+
 def _tstat(sig, base):
     a = np.array(sig, float)
     b = np.array(base, float)
@@ -438,34 +472,37 @@ def run_backtest(bundle, market="us", bench_daily=None, horizons=(1, 3, 5, 10),
         base.append(b)
 
     hz = f"ret{max_h}"
+    sb = {f"ret{h}": _side_base(base, f"ret{h}") for h in horizons}
     lines = [f"# Backtest — {MARKETS[market]['label']}  ({dt.date.today()})",
              f"events {len(events)} · baseline {len(base)} · horizons {list(horizons)} "
-             f"· cooldown {cooldown} · vol-state = rv-proxy", ""]
+             f"· cooldown {cooldown} · vol-state = rv-proxy · baselines side-matched", ""]
 
     def table(title, groups, horizon=hz, directional_only=False):
         lines.append(f"## {title}")
-        lines.append(f"| bucket | n | mean%({horizon}) | med% | win% | t vs base |")
-        lines.append("|---|---|---|---|---|---|")
-        bvals = [b[horizon] for b in base]
+        lines.append(f"| bucket | n | mean%({horizon}) | ex% vs matched base | med% | win% | t (side-matched) |")
+        lines.append("|---|---|---|---|---|---|---|")
         for k in sorted(groups, key=lambda x: str(x)):
-            evs = groups[k]
-            if directional_only:
-                evs = [e for e in evs if e["side"] in ("long", "short")]
+            evs = [e for e in groups[k] if e["side"] in ("long", "short")]
             st = _stats([e.get(horizon) for e in evs])
             if st["n"] == 0:
                 continue
-            tv = _tstat([e.get(horizon) for e in evs if e.get(horizon) is not None], bvals)
-            lines.append(f"| {k} | {st['n']} | {st['mean']} | {st['med']} | "
+            ex, tv = _matched(evs, horizon, sb[horizon])
+            lines.append(f"| {k} | {st['n']} | {st['mean']} | "
+                         f"{ex if ex is not None else ''} | {st['med']} | "
                          f"{st['win']} | {tv if tv is not None else ''} |")
         lines.append("")
 
     dir_ev = [e for e in events if e["side"] in ("long", "short")]
     neu_ev = [e for e in events if e["side"] == "neutral"]
 
-    bst = _stats([b[hz] for b in base])
-    lines.append(f"**Baseline (random, signed)**: n {bst.get('n')} mean {bst.get('mean')}% "
-                 f"med {bst.get('med')}% win {bst.get('win')}%\n")
+    bl = _stats(sb[hz]["long"])
+    bs = _stats(sb[hz]["short"])
+    lines.append(f"**Baseline @ {max_h}d (side-matched)**: long n {bl.get('n')} "
+                 f"mean {bl.get('mean')}% · short n {bs.get('n')} mean {bs.get('mean')}% "
+                 f"(drift = the gap; all t-stats below compare against the matching side mix)\n")
+    table("By side", _bucket(dir_ev, lambda e: e["side"]))
     table("By rule (directional)", _bucket(dir_ev, lambda e: e["signal"]))
+    table("By rule x side", _bucket(dir_ev, lambda e: f"{e['signal']}/{e['side']}"))
     for h in horizons:
         table(f"By rule @ {h}d", _bucket(dir_ev, lambda e: e["signal"]), horizon=f"ret{h}")
 
@@ -523,6 +560,8 @@ def main():
     ap.add_argument("--cooldown", type=int, default=10)
     ap.add_argument("--verify", type=int, default=0,
                     help="run N parity checks (replay vs live scanner) before the study")
+    ap.add_argument("--period", default=None,
+                    help=f"history window (default {CFG.bt_period}; scan default stays shorter)")
     ap.add_argument("--out", default="backtest")
     a = ap.parse_args()
 
@@ -530,14 +569,15 @@ def main():
     syms = a.tickers or uni.universe_for(a.market)
     if a.limit:
         syms = syms[:a.limit]
-    print(f"[bt] {mkt['label']}: downloading {len(syms)} symbols...")
-    daily = dl.download_daily(syms)
+    period = a.period or CFG.bt_period
+    print(f"[bt] {mkt['label']}: downloading {len(syms)} symbols ({period})...")
+    daily = dl.download_daily(syms, period=period)
     bundle = {}
     for t, d in daily.items():
         if dl.passes_liquidity(d, mkt["min_price"], mkt["min_dollar_vol"]):
             bundle[t] = (d, dl.to_weekly(d))
     print(f"[bt] {len(bundle)} liquid symbols")
-    bench = dl.download_daily([mkt["bench"]]).get(mkt["bench"])
+    bench = dl.download_daily([mkt["bench"]], period=period).get(mkt["bench"])
 
     if a.verify:
         checked, mism = verify_parity(bundle, n=a.verify)

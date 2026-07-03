@@ -84,7 +84,9 @@ BULLISH = {
 }
 BEARISH = {
     "bearish_engulfing": (bearish_engulfing, 1.0),
-    "evening_star": (evening_star, 1.0),
+    # evening_star retired as a trigger: negative expectancy in all three
+    # markets in the 2y event study (US t=-6.0, ASX t=-3.8), worst of the
+    # bearish set even before side-matched baselines. Detector kept above.
     "dark_cloud": (dark_cloud, 0.8),
     "shooting_star": (shooting_star, 0.7),
     "tweezer_top": (tweezer_top, 0.5),

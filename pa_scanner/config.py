@@ -44,7 +44,7 @@ class Config:
     s2_vol_window: int = 20
     s2_vol_mult: float = 1.2            # volume-expansion bonus threshold
     s2_vol_gate: float = 1.0            # breakout bar must at least match prior-20 avg volume
-    s2_max_age: int = 2                 # breakout must be <= this many bars old (0 = today)
+    s2_max_age: int = 1                 # breakout must be <= this many bars old (0 = today); backtest: age2 negative in US+ASX
     s2_max_ext_atr: float = 1.5         # reject entries further than this past the trigger
     s2_ext_sweet_atr: float = 0.5       # full magnitude score up to this extension
 
@@ -111,6 +111,7 @@ class Config:
     structure_from: str = "signal"
 
     # --- quality / ranking ---
+    bt_period: str = "5y"              # backtest history window (scan uses daily_period)
     rs_window: int = 63                # relative-strength lookback (days) vs the market benchmark
     rs_adj_max: float = 0.10           # max score adjustment from RS percentile
     index_penalty: float = 0.10        # counter-index-regime score penalty
