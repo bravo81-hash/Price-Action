@@ -6,3 +6,4 @@ env/
 .DS_Store
 pa_report.html
 pa_scan_*.csv
+backtest/

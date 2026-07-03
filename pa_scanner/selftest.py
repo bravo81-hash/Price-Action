@@ -3,6 +3,7 @@
 Run: python -m pa_scanner.selftest
 Exits non-zero on any failure.
 """
+import os
 import sys
 
 import numpy as np
@@ -405,6 +406,43 @@ def main():
     ok_rows = [{"ticker": "STR", "side": "long", "score": 0.5, "signal": "S2"}]
     b2 = _amc(ok_rows, {"STR": (make_s2("long"), dl.to_weekly(make_s2("long")))}, bad, market="us")
     check("bench without close degrades to None (no crash)", b2 is None)
+
+    print("backtest harness")
+    from .backtest import verify_parity, run_backtest, _dedup, _fwd
+    bnd = {"UP": (make_s2("long"), dl.to_weekly(make_s2("long"))),
+           "DN": (make_s2("short"), dl.to_weekly(make_s2("short"))),
+           "RG": (make_range(), dl.to_weekly(make_range()))}
+    chk, mism = verify_parity(bnd, n=90, seed=3)
+    check("parity: replay == live scanner (0 mismatches)", chk >= 60 and len(mism) == 0)
+
+    ded = _dedup([{"ticker": "A", "signal": "S2", "side": "long", "t": 5},
+                  {"ticker": "A", "signal": "S2", "side": "long", "t": 9},
+                  {"ticker": "A", "signal": "S2", "side": "long", "t": 30},
+                  {"ticker": "A", "signal": "S1", "side": "long", "t": 6}], cooldown=10)
+    check("cooldown dedups within window, keeps later re-fire", len(ded) == 3)
+
+    fa = {"X": {"close": np.array([100.0, 100, 100, 110, 120]),
+                "high": np.array([100.0, 100, 100, 112, 121]),
+                "low":  np.array([100.0, 100, 100, 95, 118])}}
+    ev = _fwd({"ticker": "X", "t": 2, "side": "long"}, fa, (1, 2), 2)
+    check("fwd return math (long)", ev["ret1"] == 10.0 and ev["ret2"] == 20.0)
+    check("MAE/MFE math (long)", ev["mfe"] == 21.0 and ev["mae"] == -5.0)
+    evs = _fwd({"ticker": "X", "t": 2, "side": "short"}, fa, (2,), 2)
+    check("fwd return math (short, signed)", evs["ret2"] == -20.0)
+
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        r1 = run_backtest(bnd, market="asx", bench_daily=make_range(),
+                          horizons=(3, 5, 10), out_dir=td, verbose=False)
+        r2 = run_backtest(bnd, market="asx", bench_daily=make_range(),
+                          horizons=(3, 5, 10), out_dir=td, verbose=False)
+        check("backtest produces events + files",
+              len(r1["events"]) > 0 and os.path.exists(r1["report"]) and os.path.exists(r1["csv"]))
+        check("baseline is seed-deterministic",
+              [b["t"] for b in r1["baseline"]] == [b["t"] for b in r2["baseline"]])
+        check("events carry rs/vol/bench annotations",
+              all(k in r1["events"][0] for k in ("rs_pct", "vol_state", "bench", "mae", "mfe"))
+              or r1["events"][0]["side"] == "neutral")
 
     print(f"\n{len(PASS)} passed, {len(FAIL)} failed")
     if FAIL:

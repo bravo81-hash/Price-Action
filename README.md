@@ -167,6 +167,29 @@ and materially better:
 - Sub-half-ATR bars can't print hammer/star/tweezer patterns; tweezers are
   down-weighted.
 
+## Backtest (event study)
+
+`python -m pa_scanner.backtest --market us|asx|in` replays the scanner over the
+downloaded history and measures forward edge per rule. `run_backtest.bat` runs
+all three markets. Outputs (local-only, gitignored): `backtest/report_<mkt>.md`
+and raw `events_<mkt>.csv`.
+
+- **Fidelity:** the replay rebuilds the exact live SymbolContext per bar and
+  feeds the real rule objects; `--verify N` cross-checks N random bars against
+  the live `prepare_context` (the selftest requires 100% parity).
+- **Measures:** signed forward returns at 1/3/5/10d vs a seeded random baseline
+  (same universe/dates), win rate and t-stat sliced by rule, score decile
+  (monotonicity check), RS bucket, weekly-trend alignment, benchmark regime,
+  S2 age, S1 pattern, and vol-state (realized-vol proxy - true IVR history is
+  not replayable). S3 reports range hold-rate and absolute move vs baseline
+  (condor proxy). S1/S2 MAE/MFE inform stop and target placement.
+- **Reading it:** a rule earns its place if mean/median beat baseline with a
+  t-stat you trust and score deciles are monotonic. Use `events_<mkt>.csv` for
+  custom slices; thresholds in config.py should be retuned from these tables,
+  then re-run.
+- First-fire events only (10-bar cooldown per ticker+rule+side); entries are
+  next-day-close-agnostic (event-study convention: signal-bar close to t+h close).
+
 ## Configuration
 
 All knobs live in `pa_scanner/config.py` (`CFG`). Key ones:
