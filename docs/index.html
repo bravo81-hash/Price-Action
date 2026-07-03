@@ -39,6 +39,7 @@
  .tag{padding:1px 7px;border-radius:4px;font-size:11px;font-weight:600}
  .s1{background:#1f6feb33;color:#79c0ff} .s2{background:#a371f733;color:#d2a8ff}
  .s3{background:#8b949e33;color:#c9d1d9} .s4{background:#2ea04333;color:#7ee787}
+ .prime{background:#f0c00033;color:#f0c000;font-weight:700}
  .long{color:var(--grn)} .short{color:var(--red)}
  .bullish{color:var(--grn)} .bearish{color:var(--red)} .neutral{color:var(--mut)}
  .src{color:var(--mut);font-size:10px;text-transform:uppercase}
@@ -222,6 +223,20 @@ target 1.5×ATR, 10-bar time exit.</li>
 <li><b>S3 (neutral)</b> — stop/target show the range low/high as condor short-strike references.</li>
 </ul>
 
+<h2>S4★ PRIME</h2>
+<p>When the benchmark regime reads bearish, S4 rows are starred gold (<b>S4★</b>) and sort to
+the top — that cell is the single strongest result in the entire backtest program (+5.57%
+excess @63d, t=9.4 US; +4.09%, t=7.0 ASX, replicated). The stand-down banner applies to
+S1/S2 trend entries only; S4★ rows are the exception, not a contradiction. Filter chip:
+<b>S4★ Prime</b>. India is excluded (cell untested there).</p>
+
+<h2>Forward ledger</h2>
+<p>Every scan logs its hits into <code>docs/data/ledger_&lt;mkt&gt;.json</code> and tracks
+each one against its own stop / target / time exit on subsequent scans (conservative fills:
+entry at signal close; stop assumed first when one bar spans both levels). This builds true
+out-of-sample evidence for every rule — including the S4★ cell — and is the prerequisite for
+any future promotion round. Stats: <code>python -m pa_scanner.ledger --market us</code>.</p>
+
 <h2>Running a scan</h2>
 <p>Scans run locally (Python + TWS/yfinance) and push a JSON snapshot the dashboard reads.
 One-click runners: <code>run_scan.bat</code> (US), <code>run_scan_live.bat</code> (US, last-hour
@@ -250,10 +265,10 @@ const HEAD = {
     ["dist","Dist/Brk(ATR)","num"],["age","Age","num"],["stop","Stop","num"],["tgt","Tgt","num"],["detail","Detail"],["","Chart"]]
 };
 const FILTERS = {
-  options:[["all","All"],["S1","S1 reversal"],["S2","S2 breakout"],["S3","S3 chop"],["S4","S4 snapback"],
+  options:[["all","All"],["S1","S1 reversal"],["S2","S2 breakout"],["S3","S3 chop"],["S4","S4 snapback"],["prime","S4★ Prime"],
     ["long","Long"],["short","Short"],["neutral","Neutral"],["rs","RS>50"],["ern","Ern OK"]],
   directional:[["all","All"],["buy","Buy"],["hold","Hold"],["exit","Exit / Trim"],
-    ["avoid","Avoid / Watch"],["S1","S1"],["S2","S2"],["S3","S3"],["S4","S4"],["rs","RS>50"]]
+    ["avoid","Avoid / Watch"],["S1","S1"],["S2","S2"],["S3","S3"],["S4","S4"],["prime","S4★"],["rs","RS>50"]]
 };
 
 function dispSym(t){ return MODE==="options" ? t : t.replace(/\.(AX|NS)$/,''); }
@@ -346,7 +361,7 @@ function rowHTML(r){
     return head+
       `<td>${actionCell(r)}</td>`+
       `<td>${trendCell(r)}</td>`+
-      `<td><span class="tag ${String(r.signal).toLowerCase()}">${r.signal}</span></td>`+
+      `<td><span class="tag ${r.prime?"prime":String(r.signal).toLowerCase()}">${r.signal}${r.prime?"★":""}</span></td>`+
       `<td class="${r.trigger}">${r.trigger||''}</td>`+
       `<td class="num">${r.rank??""}</td>`+
       `<td class="num score">${Number(r.score).toFixed(3)}</td>`+
@@ -362,7 +377,7 @@ function rowHTML(r){
       `<td>${spark(r.spark, r.side)}</td>`+tv;
   }
   return head+
-    `<td><span class="tag ${String(r.signal).toLowerCase()}">${r.signal}</span></td>`+
+    `<td><span class="tag ${r.prime?"prime":String(r.signal).toLowerCase()}">${r.signal}${r.prime?"★":""}</span></td>`+
     `<td class="${r.side}">${r.side}</td>`+
     `<td class="num">${r.rank??""}</td>`+
     `<td class="num score">${Number(r.score).toFixed(3)}</td>`+
@@ -388,6 +403,7 @@ function passes(r){
   if(q && !dispSym(r.ticker).toLowerCase().includes(q) && !r.ticker.toLowerCase().includes(q)) return false;
   if(filt==="all") return true;
   if(filt==="S1"||filt==="S2"||filt==="S3"||filt==="S4") return r.signal===filt;
+  if(filt==="prime") return !!r.prime;
   if(filt==="rs") return r.rs_pct!=null && r.rs_pct>50;
   if(filt==="ern") return r.ern==null || r.ern>ERNWARN;
   if(MODE==="directional"){
@@ -481,8 +497,8 @@ $("#q").oninput=e=>{q=e.target.value.trim().toLowerCase(); render();};
 $("#reload").onclick=()=>{ const s=$("#snap"); load(s.value||"latest"); };
 $("#csv").onclick=()=>{
   const cols = MODE==="directional"
-    ? ["ticker","action","action_note","trend","trend_adx","signal","trigger","side","rank","score","last","atr","atr_pct","rs","rs_pct","level","dist","age","stop","tgt","time_exit","detail","label"]
-    : ["ticker","signal","side","rank","score","last","level","dist","age","stop","tgt","time_exit","detail","volx","atr","atr_pct","rs","rs_pct","ern",
+    ? ["ticker","action","action_note","trend","trend_adx","signal","trigger","side","rank","score","prime","last","atr","atr_pct","rs","rs_pct","level","dist","age","stop","tgt","time_exit","detail","label"]
+    : ["ticker","signal","side","rank","score","prime","last","level","dist","age","stop","tgt","time_exit","detail","volx","atr","atr_pct","rs","rs_pct","ern",
        "regime","regime_adx","align","vol_state","vol_src","cell","structure","ivr","iv","rv","vrp","term","opt_liq","opt_oi","opt_spread","label"];
   const head=cols.join(",");
   const lines=view.map(r=>cols.map(c=>{

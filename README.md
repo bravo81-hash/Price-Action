@@ -246,6 +246,22 @@ mean reversion (US +5.57% excess @63d t=9.37, ASX +4.09% t=6.96). Rich-vol
 names snap hardest (replicated t=2.86/5.65) — prefer higher-ATR% S4 hits. No
 short mirror — candidate shorts were harmful in every market (US t=−3.9).
 
+## S4★ PRIME + forward ledger
+
+**PRIME:** when the benchmark regime reads bearish, S4 rows are starred
+(`S4★`, gold tag) and sort first — S4-during-bench-bearish is the strongest
+cell in the whole study (+5.57% excess @63d t=9.37 US; +4.09% t=6.96 ASX).
+Toggle `s4_prime`; India excluded (untested cell).
+
+**Forward ledger:** each scan appends its hits to
+`docs/data/ledger_<mkt>.json` (entry = signal close, exits from the row's
+stop/tgt/time template) and resolves prior opens against new bars —
+`target` / `stop` / `time` for directional, `broke` / `held` for S3.
+Conservative fills: stop wins a both-touched bar. This accumulates true
+out-of-sample evidence for every live rule and the PRIME cell. Stats:
+`python -m pa_scanner.ledger --market us [--dir docs]`. Skip with
+`--no-ledger`; resolved history capped at `ledger_keep_resolved`.
+
 ## Candidate setups (experimental, backtest-only)
 
 `pa_scanner/candidates.py` holds five directional-setup candidates being

@@ -12,9 +12,10 @@ import argparse
 from .config import CFG, MARKETS
 from . import universe as uni
 from . import data as dl
-from .scanner import scan, add_regime, add_market_context, compute_rank, add_exit_levels
+from .scanner import scan, add_regime, add_market_context, compute_rank, add_exit_levels, mark_prime
 from .action import add_action
 from .earnings import annotate_earnings
+from .ledger import update_ledger
 from .report import write_report
 from .webexport import write_web
 
@@ -47,6 +48,8 @@ def main():
                     help=f"post-adjustment score floor (default {CFG.min_score}; 0 disables)")
     ap.add_argument("--no-earnings", action="store_true",
                     help="US: skip days-to-earnings enrichment")
+    ap.add_argument("--no-ledger", action="store_true",
+                    help="skip forward-ledger update")
     ap.add_argument("--tws", action="store_true",
                     help="prefer the TWS vol provider (stub for now; falls back to approx)")
     ap.add_argument("--live", action="store_true",
@@ -116,14 +119,18 @@ def main():
         if CFG.earnings_enrich and not a.no_earnings:
             annotate_earnings(rows)
 
+    mark_prime(rows, binfo, market=a.market)
     compute_rank(rows)
     add_exit_levels(rows, market=a.market)
-    rows.sort(key=lambda r: (r.get("rank", 0), r["score"]), reverse=True)
+    rows.sort(key=lambda r: (bool(r.get("prime")), r.get("rank", 0), r["score"]),
+              reverse=True)
 
     if a.web:
         path = write_web(rows, a.web, scanned=len(bundle), universe=len(syms),
                          market=a.market, bench=binfo)
         print(f"[scan] -> {path} (+ dated snapshot)")
+        if not a.no_ledger:
+            update_ledger(rows, bundle, a.market, out_dir=a.web)
 
     if not a.no_html:
         out = a.out or ("pa_report.html" if a.market == "us" else f"pa_report_{a.market}.html")

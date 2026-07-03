@@ -132,6 +132,8 @@ class Config:
     in_pos_stop_atr: float = 3.5       # from 63d med MAE ~ -7.9%
     in_pos_tgt_atr: float = 4.5        # from 63d med MFE ~ +9.6%
     in_pos_time_bars: int = 63
+    s4_prime: bool = True              # star S4 rows when the bench regime is bearish
+    ledger_keep_resolved: int = 1000   # resolved forward-ledger entries kept per market
     bench_standdown: bool = True       # warn when the benchmark regime reads bearish
                                        # (5y US study: all signals -0.63% excess, t=-4.0)
 

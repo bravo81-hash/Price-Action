@@ -540,6 +540,73 @@ def main():
     s4rows = [r for r in _scan(sb4) if r["signal"] == "S4"]
     check("S4 fires end-to-end in scan()", len(s4rows) == 1 and s4rows[0]["side"] == "long")
 
+    print("S4 PRIME + forward ledger")
+    from .scanner import mark_prime
+    pr = [{"signal": "S4", "side": "long", "score": 0.6},
+          {"signal": "S2", "side": "long", "score": 0.6}]
+    mark_prime(pr, {"bias": "bearish"}, market="us")
+    check("PRIME set on S4 only when bench bearish",
+          pr[0]["prime"] and not pr[1]["prime"])
+    pr2 = [{"signal": "S4", "side": "long", "score": 0.6}]
+    mark_prime(pr2, {"bias": "bullish"}, market="us")
+    check("no PRIME when bench bullish", not pr2[0]["prime"])
+    pr3 = [{"signal": "S4", "side": "long", "score": 0.6}]
+    mark_prime(pr3, {"bias": "bearish"}, market="in")
+    check("no PRIME in India (cell untested)", not pr3[0]["prime"])
+
+    from .ledger import update_ledger, _resolve_entry, _load
+    def lframe(path_prices):
+        idx = pd.bdate_range("2026-01-05", periods=len(path_prices))
+        c = np.array(path_prices, float)
+        return pd.DataFrame({"open": c, "high": c + 1.0, "low": c - 1.0,
+                             "close": c, "volume": np.full(len(c), 1e6)}, index=idx)
+
+    ent = {"ticker": "T", "signal": "S4", "side": "long",
+           "entry_date": "2026-01-05", "entry_px": 100.0,
+           "stop": 96.0, "tgt": 103.0, "time_exit": 5}
+    hitT = _resolve_entry(ent, lframe([100, 101, 102.5]))   # high 103.5 >= tgt on bar 3
+    check("ledger: target resolution", hitT and hitT["outcome"] == "target"
+          and hitT["ret_pct"] == 3.0 and hitT["bars_held"] == 2)
+    hitS = _resolve_entry(ent, lframe([100, 98, 96.5]))     # low 95.5 <= stop
+    check("ledger: stop resolution", hitS and hitS["outcome"] == "stop"
+          and hitS["ret_pct"] == -4.0)
+    both = _resolve_entry(ent, lframe([100, 100.1]) .assign(
+        high=[101.0, 104.0], low=[99.0, 95.0]))             # bar spans both -> stop first
+    check("ledger: stop wins a both-touched bar", both and both["outcome"] == "stop")
+    hitTm = _resolve_entry(ent, lframe([100, 100.4, 100.2, 100.3, 100.1, 100.6, 100.2]))
+    check("ledger: time exit after 5 bars", hitTm and hitTm["outcome"] == "time"
+          and hitTm["bars_held"] == 5)
+    sh = dict(ent, side="short", stop=104.0, tgt=97.0)
+    hitSh = _resolve_entry(sh, lframe([100, 98.5]))         # low 97.5? no; next
+    hitSh = _resolve_entry(sh, lframe([100, 97.5]))         # low 96.5 <= tgt
+    check("ledger: short target signed +", hitSh and hitSh["outcome"] == "target"
+          and hitSh["ret_pct"] == 3.0)
+    neu = {"ticker": "T", "signal": "S3", "side": "neutral",
+           "entry_date": "2026-01-05", "entry_px": 100.0,
+           "stop": 95.0, "tgt": 105.0, "time_exit": 3}
+    nb = _resolve_entry(neu, lframe([100, 106.0]))
+    check("ledger: neutral broke on edge close", nb and nb["outcome"] == "broke")
+    nh = _resolve_entry(neu, lframe([100, 101, 100, 100.5]))
+    check("ledger: neutral held to time", nh and nh["outcome"] == "held")
+
+    with tempfile.TemporaryDirectory() as tdl:
+        fr = lframe([100] * 6)
+        lb = {"T": (fr, dl.to_weekly(fr))}
+        lrows = [{"ticker": "T", "signal": "S4", "side": "long", "last": 100.0,
+                  "stop": 96.0, "tgt": 103.0, "time_exit": 5, "score": 0.6,
+                  "rank": 100, "prime": True, "rs_pct": 80}]
+        update_ledger(lrows, lb, "us", out_dir=tdl)
+        o1, r1_ = _load(tdl, "us")
+        check("ledger: entry opened + persisted", len(o1) == 1 and o1[0]["prime"])
+        update_ledger(lrows, lb, "us", out_dir=tdl)
+        o2, _r = _load(tdl, "us")
+        check("ledger: duplicate open suppressed", len(o2) == 1)
+        fr2 = lframe([100] * 6 + [101, 102.5])               # bars beyond entry date
+        update_ledger([], {"T": (fr2, dl.to_weekly(fr2))}, "us", out_dir=tdl)
+        o3, r3_ = _load(tdl, "us")
+        check("ledger: open resolved to target on later scan",
+              len(o3) == 0 and len(r3_) == 1 and r3_[0]["outcome"] == "target")
+
     print("candidates (settled)")
     from pa_scanner import candidates as cnds
     from .backtest import candidate_events_for_ticker

@@ -17,7 +17,7 @@ from .config import MARKETS
 
 def _row(r: dict) -> dict:
     d = {k: r.get(k) for k in
-         ("ticker", "signal", "signal_name", "side", "score", "rank", "last", "atr", "atr_pct",
+         ("ticker", "signal", "signal_name", "side", "score", "rank", "prime", "last", "atr", "atr_pct",
           "rs", "rs_pct", "age", "ern", "stop", "tgt", "time_exit", "label", "level",
           # options (US) fields
           "regime", "regime_adx", "align", "vol_state", "vol_src", "cell", "structure",

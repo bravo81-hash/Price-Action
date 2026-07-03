@@ -101,6 +101,7 @@ _FILTERS_OPTIONS = """
   <button data-f="S2">S2 breakout</button>
   <button data-f="S3">S3 chop</button>
   <button data-f="S4">S4 snapback</button>
+  <button data-f="prime">S4&#9733; Prime</button>
   <button data-f="long">Long</button>
   <button data-f="short">Short</button>
   <button data-f="neutral">Neutral</button>
@@ -117,6 +118,7 @@ _FILTERS_DIRECTIONAL = """
   <button data-f="S2">S2</button>
   <button data-f="S3">S3</button>
   <button data-f="S4">S4</button>
+  <button data-f="prime">S4&#9733;</button>
   <button data-f="rs">RS&gt;50</button>"""
 
 
@@ -154,6 +156,7 @@ _TEMPLATE = """<!doctype html>
  .tag{padding:1px 7px;border-radius:4px;font-size:11px;font-weight:600}
  .s1{background:#1f6feb33;color:#79c0ff} .s2{background:#a371f733;color:#d2a8ff}
  .s3{background:#8b949e33;color:#c9d1d9} .s4{background:#2ea04333;color:#7ee787}
+ .prime{background:#f0c00033;color:#f0c000;font-weight:700}
  .long{color:var(--grn)} .short{color:var(--red)}
  .bullish{color:var(--grn)} .bearish{color:var(--red)} .neutral{color:var(--mut)}
  .src{color:var(--mut);font-size:10px;text-transform:uppercase}
@@ -252,7 +255,7 @@ function rowHTML(r){
     return head+
       `<td>${actionCell(r)}</td>`+
       `<td>${trendCell(r)}</td>`+
-      `<td><span class="tag ${r.signal.toLowerCase()}">${r.signal}</span></td>`+
+      `<td><span class="tag ${r.prime?"prime":r.signal.toLowerCase()}">${r.signal}${r.prime?"\u2605":""}</span></td>`+
       `<td class="${r.trigger}">${r.trigger||''}</td>`+
       `<td class="num">${r.rank??""}</td>`+
       `<td class="num score">${r.score.toFixed(3)}</td>`+
@@ -268,7 +271,7 @@ function rowHTML(r){
       `<td>${r.spark_svg}</td>`+tv;
   }
   return head+
-    `<td><span class="tag ${r.signal.toLowerCase()}">${r.signal}</span></td>`+
+    `<td><span class="tag ${r.prime?"prime":r.signal.toLowerCase()}">${r.signal}${r.prime?"\u2605":""}</span></td>`+
     `<td class="${r.side}">${r.side}</td>`+
     `<td class="num">${r.rank??""}</td>`+
     `<td class="num score">${r.score.toFixed(3)}</td>`+
@@ -296,6 +299,7 @@ function passes(r){
   if(q && !dispSym(r.ticker).toLowerCase().includes(q) && !r.ticker.toLowerCase().includes(q)) return false;
   if(filt==="all") return true;
   if(filt==="S1"||filt==="S2"||filt==="S3"||filt==="S4") return r.signal===filt;
+  if(filt==="prime") return !!r.prime;
   if(filt==="rs") return r.rs_pct!=null && r.rs_pct>50;
   if(filt==="ern") return r.ern==null || r.ern>__ERNWARN__;
   if(MODE==="directional"){
@@ -334,8 +338,8 @@ document.querySelectorAll(".bar button[data-f]").forEach(btn=>btn.onclick=()=>{
 $("#q").oninput=e=>{q=e.target.value.trim().toLowerCase(); render();};
 $("#csv").onclick=()=>{
   const cols = MODE==="directional"
-    ? ["ticker","action","action_note","trend","trend_adx","signal","trigger","side","rank","score","last","atr","atr_pct","rs","rs_pct","level","dist","age","stop","tgt","time_exit","detail","label"]
-    : ["ticker","signal","side","rank","score","last","live","live_status","live_dist","level","dist","age","stop","tgt","time_exit","detail","volx","atr","atr_pct","rs","rs_pct","ern",
+    ? ["ticker","action","action_note","trend","trend_adx","signal","trigger","side","rank","score","prime","last","atr","atr_pct","rs","rs_pct","level","dist","age","stop","tgt","time_exit","detail","label"]
+    : ["ticker","signal","side","rank","score","prime","last","live","live_status","live_dist","level","dist","age","stop","tgt","time_exit","detail","volx","atr","atr_pct","rs","rs_pct","ern",
        "regime","regime_adx","align","vol_state","vol_src","cell","structure","ivr","iv","rv","vrp","term","opt_liq","opt_oi","opt_spread","label"];
   const head=cols.join(",");
   const lines=view.map(r=>cols.map(c=>{

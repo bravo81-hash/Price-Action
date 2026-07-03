@@ -301,6 +301,25 @@ def _clip01_f(x):
     return float(max(0.0, min(1.0, x)))
 
 
+def mark_prime(rows, binfo, market="us"):
+    """S4 PRIME: the strongest cell in the entire study - S4 during a
+    bench-bearish regime (+5.57% excess @63d t=9.37 US; +4.09% t=6.96 ASX,
+    replicated). Flags those rows so they sort first and render starred.
+    India excluded (cell untested there)."""
+    if not (CFG.s4_prime and binfo and binfo.get("bias") == "bearish"
+            and market in ("us", "asx")):
+        for r in rows:
+            r["prime"] = False
+        return rows
+    n = 0
+    for r in rows:
+        r["prime"] = (r.get("signal") == "S4")
+        n += r["prime"]
+    if n:
+        print(f"[prime] bench bearish: {n} S4 PRIME rows")
+    return rows
+
+
 def compute_rank(rows):
     """rank = percentile of a hit's score within its own rule (0..100).
     Makes S1/S2/S3 hits comparable in one sorted list."""
