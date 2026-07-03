@@ -12,7 +12,7 @@ import argparse
 from .config import CFG, MARKETS
 from . import universe as uni
 from . import data as dl
-from .scanner import scan, add_regime, add_market_context, compute_rank
+from .scanner import scan, add_regime, add_market_context, compute_rank, add_exit_levels
 from .action import add_action
 from .earnings import annotate_earnings
 from .report import write_report
@@ -117,6 +117,7 @@ def main():
             annotate_earnings(rows)
 
     compute_rank(rows)
+    add_exit_levels(rows)
     rows.sort(key=lambda r: (r.get("rank", 0), r["score"]), reverse=True)
 
     if a.web:

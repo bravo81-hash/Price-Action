@@ -407,6 +407,17 @@ def main():
     b2 = _amc(ok_rows, {"STR": (make_s2("long"), dl.to_weekly(make_s2("long")))}, bad, market="us")
     check("bench without close degrades to None (no crash)", b2 is None)
 
+    print("exit templates")
+    from .scanner import add_exit_levels
+    xr = [{"side": "long", "last": 100.0, "atr": 2.0},
+          {"side": "short", "last": 100.0, "atr": 2.0},
+          {"side": "neutral", "last": 100.0, "atr": 2.0, "range_lo": 95.0, "range_hi": 105.0}]
+    add_exit_levels(xr)
+    check("long exit levels (2.0/1.5 ATR)", xr[0]["stop"] == 96.0 and xr[0]["tgt"] == 103.0)
+    check("short exit levels mirrored", xr[1]["stop"] == 104.0 and xr[1]["tgt"] == 97.0)
+    check("neutral exits = range edges", xr[2]["stop"] == 95.0 and xr[2]["tgt"] == 105.0)
+    check("time exit attached", all(r["time_exit"] == CFG.exit_time_bars for r in xr))
+
     print("backtest harness")
     from .backtest import verify_parity, run_backtest, _dedup, _fwd
     bnd = {"UP": (make_s2("long"), dl.to_weekly(make_s2("long"))),

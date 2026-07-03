@@ -306,6 +306,31 @@ def compute_rank(rows):
     return rows
 
 
+def add_exit_levels(rows):
+    """Stop / target / time-exit per hit, from the 5y MAE/MFE study.
+
+    Directional: stop = 2.0 x ATR against, target = 1.5 x ATR with (median MAE
+    over 10 bars was ~-3.4% ~ 1.5-2 ATR; median MFE ~ +3.4%). Neutral (S3):
+    the range edges are the short-strike references. Time exit: 10 bars.
+    """
+    for r in rows:
+        atr, last = r.get("atr"), r.get("last")
+        if not atr or not last:
+            r["stop"], r["tgt"] = None, None
+            continue
+        if r["side"] == "long":
+            r["stop"] = round(last - CFG.exit_stop_atr * atr, 2)
+            r["tgt"] = round(last + CFG.exit_target_atr * atr, 2)
+        elif r["side"] == "short":
+            r["stop"] = round(last + CFG.exit_stop_atr * atr, 2)
+            r["tgt"] = round(last - CFG.exit_target_atr * atr, 2)
+        else:  # neutral: condor short-strike references
+            r["stop"] = r.get("range_lo")
+            r["tgt"] = r.get("range_hi")
+        r["time_exit"] = CFG.exit_time_bars
+    return rows
+
+
 def option_liquidity(oi_call, oi_put, spread_pct, oi_min=None, spread_max=None):
     """Classify ATM option-chain liquidity for a hit -> (flag, oi_total, spread_pct).
 

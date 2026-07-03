@@ -119,6 +119,13 @@ class Config:
     earnings_enrich: bool = True       # US: annotate days-to-earnings on hits (yfinance)
     earnings_warn_days: int = 10       # <= this many days = warn tint / filter
 
+    # --- exit templates (from the 5y MAE/MFE study: med MAE ~ -3.4%) ---
+    exit_stop_atr: float = 2.0         # protective stop distance (x ATR)
+    exit_target_atr: float = 1.5       # first target distance (x ATR)
+    exit_time_bars: int = 10           # time stop (bars) matching the study horizon
+    bench_standdown: bool = True       # warn when the benchmark regime reads bearish
+                                       # (5y US study: all signals -0.63% excess, t=-4.0)
+
     # --- report ---
     spark_bars: int = 40
 

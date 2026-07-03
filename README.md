@@ -135,6 +135,29 @@ own JSON snapshot (`latest.json`, `latest_asx.json`, `latest_in.json`) and the
 cloud Action refreshes all three daily. Local buttons:
 `run_scan_asx.bat` / `run_scan_india.bat` (and `.command`).
 
+## Validated edges (5y event study, side-matched baselines)
+
+Honest positioning after 59k backtested events across all three markets:
+
+- **US/ASX directional entries (S1/S2) carry no measured aggregate alpha**
+  (|t| < 1.6 everywhere after drift correction). Treat them as *context and
+  candidate generation*, not edge. Score/rank organize the list; they do not
+  predict returns (deciles are flat over 5y).
+- **India EXIT flags are validated** — bearish S1 triggers predict
+  underperformance (+0.54% excess over 10d, t=3.0). The long-only tab's
+  get-out logic is the strongest result in the study.
+- **US bench-bearish stand-down is real risk information**: all signals fired
+  while SPY reads bearish lose −0.63% excess (t=−4.0). The dashboard and
+  report show a STAND-DOWN banner in that state (`bench_standdown`).
+- **S3 quiet-name selection works in all three markets** (~8–10% lower 10-day
+  absolute move than baseline) — the condor-selection function is the app's
+  measured edge for premium selling.
+- **Exit templates** (from the 5y MAE/MFE distributions: median MAE ≈ −3.4%):
+  every hit carries Stop (2.0×ATR), Tgt (1.5×ATR; range edges for S3), and a
+  10-bar time exit (`exit_stop_atr`, `exit_target_atr`, `exit_time_bars`).
+- Isolated significant cells (single patterns in single markets) are treated
+  as multiple-comparison artifacts unless they replicate.
+
 ## Signal quality (v2)
 
 The signal core was hardened after review; the visible list should be shorter

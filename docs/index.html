@@ -78,14 +78,14 @@ const ERNWARN = 10;
 
 const HEAD = {
   options:[["ticker","Ticker"],["signal","Sig"],["side","Side"],["rank","Rank","num"],["score","Score","num"],
-    ["last","Last","num"],["level","Level","num"],["dist","Dist/Brk(ATR)","num"],["age","Age","num"],["detail","Detail"],
+    ["last","Last","num"],["level","Level","num"],["dist","Dist/Brk(ATR)","num"],["age","Age","num"],["stop","Stop","num"],["tgt","Tgt","num"],["detail","Detail"],
     ["volx","Vol×","num"],["atr","ATR","num"],["atr_pct","ATR%","num"],["rs_pct","RS","num"],["ern","Ern(d)","num"],
     ["regime","Regime"],["vol_state","Vol"],
     ["structure","Structure"],["opt_liq","Opt Liq"],["","Trend"],["","Chart"]],
   directional:[["ticker","Ticker"],["action","Action"],["trend","Weekly Trend"],["signal","Sig"],
     ["trigger","Trigger"],["rank","Rank","num"],["score","Score","num"],["last","Last","num"],["atr_pct","ATR%","num"],
     ["rs_pct","RS","num"],["level","Level","num"],
-    ["dist","Dist/Brk(ATR)","num"],["age","Age","num"],["detail","Detail"],["","Chart"]]
+    ["dist","Dist/Brk(ATR)","num"],["age","Age","num"],["stop","Stop","num"],["tgt","Tgt","num"],["detail","Detail"],["","Chart"]]
 };
 const FILTERS = {
   options:[["all","All"],["S1","S1 reversal"],["S2","S2 breakout"],["S3","S3 chop"],
@@ -194,6 +194,8 @@ function rowHTML(r){
       `<td class="num">${r.level??""}</td>`+
       `<td class="num">${r.dist??""}</td>`+
       `<td class="num">${r.age??""}</td>`+
+      `<td class="num">${r.stop??""}</td>`+
+      `<td class="num">${r.tgt??""}</td>`+
       `<td>${r.detail??""}</td>`+
       `<td>${spark(r.spark, r.side)}</td>`+tv;
   }
@@ -206,6 +208,8 @@ function rowHTML(r){
     `<td class="num">${r.level??""}</td>`+
     `<td class="num">${r.dist??""}</td>`+
     `<td class="num">${r.age??""}</td>`+
+    `<td class="num">${r.stop??""}</td>`+
+    `<td class="num">${r.tgt??""}</td>`+
     `<td>${r.detail??""}</td>`+
     `<td class="num">${r.volx??""}</td>`+
     `<td class="num">${r.atr??""}</td>`+
@@ -252,6 +256,11 @@ function applyData(d){
   $("#gen").textContent = d.generated ? "updated " + d.generated.replace("T"," ").replace("Z"," UTC") : "";
   const bench = d.bench ? ` · ${d.bench.symbol}: ${String(d.bench.bias).toUpperCase()} (ADX ${d.bench.adx})` : "";
   $("#counts").textContent = `universe ${d.universe??"?"} · liquid ${d.scanned??"?"} · signals ${d.count??ROWS.length}${bench}`;
+  const b0=$("#banner");
+  if(d.bench && d.bench.bias==="bearish"){
+    b0.textContent = `⚠ STAND-DOWN — ${d.bench.symbol} regime bearish. 5y study: all signals −0.63% excess (t=−4.0). Reduce size / stand aside.`;
+    b0.style.display="block";
+  } else if(!d.note){ b0.style.display="none"; }
   const b=$("#banner");
   if(d.note){ b.textContent = d.note; b.style.display="block"; } else { b.style.display="none"; }
   buildChrome();
@@ -294,8 +303,8 @@ $("#q").oninput=e=>{q=e.target.value.trim().toLowerCase(); render();};
 $("#reload").onclick=()=>{ const s=$("#snap"); load(s.value||"latest"); };
 $("#csv").onclick=()=>{
   const cols = MODE==="directional"
-    ? ["ticker","action","action_note","trend","trend_adx","signal","trigger","side","rank","score","last","atr","atr_pct","rs","rs_pct","level","dist","age","detail","label"]
-    : ["ticker","signal","side","rank","score","last","level","dist","age","detail","volx","atr","atr_pct","rs","rs_pct","ern",
+    ? ["ticker","action","action_note","trend","trend_adx","signal","trigger","side","rank","score","last","atr","atr_pct","rs","rs_pct","level","dist","age","stop","tgt","time_exit","detail","label"]
+    : ["ticker","signal","side","rank","score","last","level","dist","age","stop","tgt","time_exit","detail","volx","atr","atr_pct","rs","rs_pct","ern",
        "regime","regime_adx","align","vol_state","vol_src","cell","structure","ivr","iv","rv","vrp","term","opt_liq","opt_oi","opt_spread","label"];
   const head=cols.join(",");
   const lines=view.map(r=>cols.map(c=>{
