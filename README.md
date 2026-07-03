@@ -233,13 +233,18 @@ and raw `events_<mkt>.csv`.
 
 ## S4 — Oversold snapback (promoted candidate)
 
-The one candidate that cleared the promotion bar, now a live rule in all
-markets: **long-only**, close above the 200SMA, RSI(3) < 15, two consecutive
-down closes. Evidence: US 5d excess +0.38% (t=3.44), replicated ASX (t=2.13),
-ASX persistence to 63d (t=2.31); shallowest MAE of all candidates. Edge decays
-past ~10d, so S4 rows carry a **5-bar time exit** (`s4_time_bars`) with the
-standard 2.0/1.5 ATR stop/target. No short mirror — candidate shorts were
-harmful in every market (US all-shorts t=−3.9).
+Live in all markets, **long-only**, close above the 200SMA, with two
+backtest-promoted triggers: **RSI(3) < 15 with a 2+ down-close streak**
+(round 1: US 5d +0.38% t=3.44, ASX t=2.13 — RSI(3) beat the RSI(2) textbook
+variant in the US parameter test) **or a 4+ consecutive-down-close flush**
+(round 2 STRK4: US t=3.17, ASX t=2.73, ASX persistence 21–63d;
+`s4_streak_min`). Exits: US 5-bar time exit (`s4_time_bars`) with 2.0/1.5 ATR;
+**ASX S4 uses the position template** (3.5/4.5 ATR, 63 bars) because ASX MR
+excess grows monotonically with horizon. **S4 is exempt from the STAND-DOWN
+banner and the counter-index penalty** — bench-bearish regimes supercharge
+mean reversion (US +5.57% excess @63d t=9.37, ASX +4.09% t=6.96). Rich-vol
+names snap hardest (replicated t=2.86/5.65) — prefer higher-ATR% S4 hits. No
+short mirror — candidate shorts were harmful in every market (US t=−3.9).
 
 ## Candidate setups (experimental, backtest-only)
 
@@ -261,13 +266,13 @@ horizons with consistent sign, or >= 2.0 replicated across US and ASX. Round-1 v
 PBEMA near-miss (US 63d t=2.33, ASX 1.65) parked for out-of-sample re-test;
 NH52/HVOL/GAPD failed and were deleted; all candidate shorts harmful (US t=-3.9).
 
-**Round 2 (current file)**: five long-only mean-reversion variants of the
-promoted OSMR family, all gated on close > 200SMA - OSMR2 (RSI(2)<10, doubles
-as the S4 parameter test: S4 switches to RSI(2) only if it beats RSI(3) at 5d
-in BOTH markets), LO7 (Connors Double-7s), BBMR (lower Bollinger), STRK4
-(4+ down closes), IBSMR (internal bar strength < 0.15). They overlap heavily,
-so at most ONE additional rule gets promoted unless event dates prove
-distinctness.
+**Round 2 (settled)**: STRK4 promoted and folded into S4 as a second trigger;
+OSMR2 settled the parameter test (RSI(2) lost to RSI(3) in the US);
+LO7/BBMR/IBSMR failed and were deleted. CANDIDATES is now empty; PBEMA stays
+parked for an out-of-sample re-test. The Pine companion (`pa_confirm.pine`,
+v2) mirrors the final engine: S1 approach/wick gates, S2
+freshness/volume/extension gates, S4 dual trigger, benchmark stand-down
+shading (S4 exempt), evening_star retired.
 
 ## Configuration
 

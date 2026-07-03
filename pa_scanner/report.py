@@ -367,7 +367,7 @@ def write_report(rows, path, scanned=0, universe=0, market="us", bench=None):
                 .replace("__ERNWARN__", str(CFG.earnings_warn_days))
                 .replace("__BENCH__",
                          ((f"{bench['symbol']}: {bench['bias'].upper()} (ADX {bench['adx']})"
-                           + ("  \u26a0 STAND-DOWN: bench bearish; 5y study = -0.63% excess on all signals (t=-4.0)"
+                           + ("  \u26a0 STAND-DOWN: bench bearish; trend entries (S1/S2) -0.63% excess (t=-4.0). S4 snapbacks EXEMPT: MR outperforms in bearish regimes (+5.6% US / +4.1% ASX @63d)"
                               if CFG.bench_standdown and bench["bias"] == "bearish" else ""))
                           if bench else ""))
                 .replace("__TV__", mkt["tv"])

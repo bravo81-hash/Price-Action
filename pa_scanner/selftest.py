@@ -482,20 +482,24 @@ def main():
 
     print("S4 oversold snapback (promoted)")
     from .rules import OversoldSnapback
-    s4_ok = neutral_ctx(last_close=105.0, atr_last=2.0, sma200=100.0, rsi3=8.0, down2=True)
+    s4_ok = neutral_ctx(last_close=105.0, atr_last=2.0, sma200=100.0, rsi3=8.0, dn_streak=2)
     r4 = OversoldSnapback().evaluate(s4_ok)
-    check("S4 fires above 200SMA with RSI3<15 + down streak", r4.hit and r4.side == "long")
+    check("S4 fires: RSI3<15 + 2-down streak", r4.hit and r4.side == "long")
     check("S4 score scales with oversold depth",
           OversoldSnapback().evaluate(neutral_ctx(last_close=105.0, atr_last=2.0,
-              sma200=100.0, rsi3=3.0, down2=True)).score > r4.score)
+              sma200=100.0, rsi3=3.0, dn_streak=2)).score > r4.score)
+    strk = OversoldSnapback().evaluate(neutral_ctx(
+        last_close=105.0, atr_last=2.0, sma200=100.0, rsi3=40.0, dn_streak=4))
+    check("S4 fires: 4-down streak without RSI condition (round-2 STRK4)",
+          strk.hit and "flush" in strk.label)
+    check("S4 blocked: RSI high + streak 3", not OversoldSnapback().evaluate(
+        neutral_ctx(last_close=105.0, atr_last=2.0, sma200=100.0, rsi3=40.0, dn_streak=3)).hit)
     check("S4 blocked below 200SMA", not OversoldSnapback().evaluate(
-        neutral_ctx(last_close=95.0, atr_last=2.0, sma200=100.0, rsi3=8.0, down2=True)).hit)
-    check("S4 blocked when RSI3 high", not OversoldSnapback().evaluate(
-        neutral_ctx(last_close=105.0, atr_last=2.0, sma200=100.0, rsi3=40.0, down2=True)).hit)
-    check("S4 blocked without down streak", not OversoldSnapback().evaluate(
-        neutral_ctx(last_close=105.0, atr_last=2.0, sma200=100.0, rsi3=8.0, down2=False)).hit)
+        neutral_ctx(last_close=95.0, atr_last=2.0, sma200=100.0, rsi3=8.0, dn_streak=2)).hit)
+    check("S4 blocked: RSI low but streak 1", not OversoldSnapback().evaluate(
+        neutral_ctx(last_close=105.0, atr_last=2.0, sma200=100.0, rsi3=8.0, dn_streak=1)).hit)
     check("S4 blocked before 200 bars (sma200 None)", not OversoldSnapback().evaluate(
-        neutral_ctx(last_close=105.0, atr_last=2.0, sma200=None, rsi3=8.0, down2=True)).hit)
+        neutral_ctx(last_close=105.0, atr_last=2.0, sma200=None, rsi3=8.0, dn_streak=2)).hit)
     check("RSI oversold on down tape", float(ind.rsi(pd.Series(
         [100 - i for i in range(30)]), 3).iloc[-1]) < 5)
     check("RSI overbought on up tape", float(ind.rsi(pd.Series(
@@ -503,8 +507,19 @@ def main():
 
     s4x = [{"side": "long", "signal": "S4", "last": 100.0, "atr": 2.0}]
     add_exit_levels(s4x, market="us")
-    check("S4 carries 5-bar time exit", s4x[0]["time_exit"] == CFG.s4_time_bars
+    check("US S4 carries 5-bar time exit", s4x[0]["time_exit"] == CFG.s4_time_bars
           and s4x[0]["stop"] == 96.0)
+    s4a = [{"side": "long", "signal": "S4", "last": 100.0, "atr": 2.0}]
+    add_exit_levels(s4a, market="asx")
+    check("ASX S4 carries the position template (3.5/4.5 ATR, 63 bars)",
+          s4a[0]["stop"] == 93.0 and s4a[0]["tgt"] == 109.0
+          and s4a[0]["time_exit"] == CFG.in_pos_time_bars)
+    exm = [{"ticker": "STR", "side": "long", "score": 0.5, "signal": "S4"},
+           {"ticker": "STR", "side": "long", "score": 0.5, "signal": "S2"}]
+    add_market_context(exm, {"STR": (make_s2("long"), dl.to_weekly(make_s2("long")))},
+                       make_s2("short"), market="us")   # bearish bench
+    check("S4 exempt from the counter-index penalty",
+          exm[0]["score"] > exm[1]["score"])
 
     # parity incl. S4-capable history (280 bars, uptrend + terminal flush)
     def s4_frame(n=280, seed=5):
@@ -525,66 +540,12 @@ def main():
     s4rows = [r for r in _scan(sb4) if r["signal"] == "S4"]
     check("S4 fires end-to-end in scan()", len(s4rows) == 1 and s4rows[0]["side"] == "long")
 
-    print("candidate setups (experimental, round 2)")
+    print("candidates (settled)")
     from pa_scanner import candidates as cnds
-
-    def cframe(n=340, drift=0.0, seed=1):
-        rng = np.random.default_rng(seed)
-        c = 100.0 + drift * np.arange(n) + rng.normal(0, 0.05, n).cumsum()
-        o = c + rng.normal(0, 0.05, n)
-        idx = pd.bdate_range("2021-01-04", periods=n)
-        return pd.DataFrame({"open": o, "high": np.maximum(o, c) + 0.5,
-                             "low": np.minimum(o, c) - 0.5, "close": c,
-                             "volume": np.full(n, 2e6)}, index=idx)
-
-    ctrl = cframe(drift=-0.08)          # downtrend: 200SMA gate blocks all
-    Pc = cnds.prep_arrays(ctrl)
-    check("candidates: downtrend control fires nothing",
-          all(cd.check(Pc, len(ctrl) - 1) is None for cd in cnds.CANDIDATES))
-
-    d = cframe(drift=0.15)
-    for k, off in ((4, 0.0), (3, 1.2), (2, 2.4), (1, 3.6)):
-        d.iloc[-k, d.columns.get_loc("close")] = d["close"].iloc[-5] - 1.0 - off
-    Pf = cnds.prep_arrays(d)
-    check("OSMR2 fires on RSI(2) flush",
-          (cnds.OSMR2().check(Pf, len(d) - 1) or ("",))[0] == "long")
-    check("STRK4 fires on 4-down streak",
-          (cnds.STRK4().check(Pf, len(d) - 1) or ("",))[0] == "long")
-
-    d = cframe(drift=0.15)
-    d.iloc[-1, d.columns.get_loc("close")] = d["close"].iloc[-8:-1].min() - 0.5
-    check("LO7 fires on 7-day-low close",
-          (cnds.LO7().check(cnds.prep_arrays(d), len(d) - 1) or ("",))[0] == "long")
-
-    d = cframe(drift=0.15)
-    d.iloc[-1, d.columns.get_loc("close")] = d["close"].iloc[-2] - 8.0
-    d.iloc[-1, d.columns.get_loc("low")] = d["close"].iloc[-1] - 0.5
-    check("BBMR fires below the lower band",
-          (cnds.BBMR().check(cnds.prep_arrays(d), len(d) - 1) or ("",))[0] == "long")
-
-    d = cframe(drift=0.15)
-    prev = d["close"].iloc[-2]
-    d.iloc[-1, d.columns.get_loc("high")] = prev + 1.0
-    d.iloc[-1, d.columns.get_loc("low")] = prev - 1.5
-    d.iloc[-1, d.columns.get_loc("close")] = prev - 1.3
-    check("IBSMR fires with close pinned to the low",
-          (cnds.IBSMR().check(cnds.prep_arrays(d), len(d) - 1) or ("",))[0] == "long")
-
-    # e2e candidate study on synthetic
     from .backtest import candidate_events_for_ticker
-    dd = cframe(n=400, drift=0.15, seed=2)
-    for k, off in ((14, 0.0), (13, 1.2), (12, 2.4), (11, 3.6)):
-        dd.iloc[-k, dd.columns.get_loc("close")] = dd["close"].iloc[-15] - 1.0 - off
-    cev, _ = candidate_events_for_ticker("SYN", dd, 10)
-    check("candidate replay emits events", len(cev) > 0
-          and all(k in cev[0] for k in ("signal", "side", "score", "t")))
-    with tempfile.TemporaryDirectory() as td2:
-        cb = {"SYN": (dd, dl.to_weekly(dd))}
-        rc = run_backtest(cb, market="us", bench_daily=make_range(),
-                          horizons=(3, 5, 10), out_dir=td2, verbose=False,
-                          use_candidates=True)
-        check("candidate report written with _cand suffix",
-              rc["report"].endswith("report_us_cand.md") and os.path.exists(rc["report"]))
+    check("candidate rounds settled (CANDIDATES empty)", cnds.CANDIDATES == [])
+    cev, _p = candidate_events_for_ticker("SYN", make_s2("long"), 10)
+    check("empty candidate replay is a no-op (no crash)", cev == [])
 
     print(f"\n{len(PASS)} passed, {len(FAIL)} failed")
     if FAIL:

@@ -121,7 +121,8 @@ class Config:
 
     # --- S4: oversold snapback (promoted candidate OSMR; US 5d t=3.44, ASX t=2.13) ---
     s4_rsi_max: float = 15.0           # RSI(3) must be below this
-    s4_time_bars: int = 5              # edge decays past ~10d; exit fast
+    s4_streak_min: int = 4             # alt trigger (round-2 STRK4: US t=3.17, ASX t=2.73)
+    s4_time_bars: int = 5              # US edge decays past ~10d; ASX S4 uses the position template
 
     # --- exit templates (from the 5y MAE/MFE study: med MAE ~ -3.4%) ---
     exit_stop_atr: float = 2.0         # protective stop distance (x ATR)

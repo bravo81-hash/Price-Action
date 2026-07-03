@@ -1,21 +1,29 @@
 //@version=6
 // =====================================================================
-//  PA Confirm — weekly-level reversal + trend-pullback-breakout
-//  Mirrors the pa_scanner Python engine for on-chart confirmation AND
-//  use in the TradingView Pine Screener (Premium).
+//  PA Confirm v2 — mirrors the final pa_scanner engine after the 5y
+//  backtest program (side-matched baselines, ~100k events):
 //
-//  Run on the DAILY timeframe. For confirmed signals, evaluate after the
-//  daily close (intraday the last bar is still forming).
+//    S1  Reversal at weekly level  - approach-direction + wick-tag gates
+//    S2  Trend pullback breakout   - freshness / volume / extension gates
+//    S4  Oversold snapback (LONG)  - the one directional setup that
+//        cleared the promotion bar (US 5d t=3.4; streak trigger t=3.2/2.7)
 //
-//  Pine Screener: add this to Favorites, open Products > Screeners > Pine,
-//  pick your watchlist, set interval = 1D, then filter on the columns
-//  S1_Long / S1_Short / S2_Long / S2_Short ( = 1 means a hit ).
+//  evening_star is retired (negative expectancy in every market).
+//  Bench STAND-DOWN: when the benchmark regime reads bearish, trend
+//  entries (S1/S2) carried -0.63% excess (t=-4.0) - background warns.
+//  S4 is EXEMPT: mean reversion outperforms in bearish regimes
+//  (+5.6% US / +4.1% ASX excess @63d).
 //
-//  Note: the weekly S/R here uses the latest confirmed weekly pivot high
-//  and low. The Python scanner additionally clusters multiple pivots into
-//  zones, so treat this as a lighter on-chart approximation.
+//  Run on the DAILY timeframe; evaluate after the close.
+//  Pine Screener: filter on S1_Long / S1_Short / S2_Long / S2_Short /
+//  S4_Long ( = 1 is a hit). WeeklyTrend: 1 up / 0 flat / -1 down.
+//  BenchBear = 1 means stand-down for S1/S2 (S4 unaffected).
+//
+//  Approximation notes vs the Python engine: weekly S/R uses the latest
+//  confirmed pivot high/low (Python clusters pivots into zones); the
+//  benchmark regime omits the DMI leg.
 // =====================================================================
-indicator("PA Confirm", overlay=true)
+indicator("PA Confirm v2", overlay=true)
 
 // ---------------- inputs ----------------
 grpW   = "Weekly trend / levels"
@@ -25,11 +33,26 @@ leftW  = input.int(2,  "Weekly pivot left", group=grpW)
 rightW = input.int(2,  "Weekly pivot right", group=grpW)
 
 grpD       = "Daily signals"
-atrLen     = input.int(14, "ATR length", group=grpD)
-nearAtr    = input.float(1.0, "Near band (x ATR)", step=0.25, group=grpD)
-breakoutN  = input.int(7,  "Breakout window (Donchian)", group=grpD)
-pullbackLk = input.int(10, "Pullback lookback (bars)", group=grpD)
-emaD       = input.int(20, "Daily EMA (pullback ref)", group=grpD)
+atrLen     = input.int(14,   "ATR length", group=grpD)
+nearAtr    = input.float(1.0, "S1 near band (x ATR)", step=0.25, group=grpD)
+wickFrac   = input.float(0.5, "S1 wick reach (x band)", step=0.25, group=grpD)
+holdFrac   = input.float(0.5, "S1 close hold (x band)", step=0.25, group=grpD)
+apprBars   = input.int(10,   "S1 approach bars (prior close median)", group=grpD)
+minBarAtr  = input.float(0.5, "S1 min bar range for 1-bar patterns (x ATR)", step=0.25, group=grpD)
+breakoutN  = input.int(7,    "S2 breakout window (Donchian)", group=grpD)
+pullbackLk = input.int(10,   "S2 pullback lookback (bars)", group=grpD)
+emaD       = input.int(20,   "Daily EMA (pullback ref)", group=grpD)
+maxAge     = input.int(1,    "S2 max breakout age (bars)", group=grpD)
+maxExtAtr  = input.float(1.5, "S2 max extension past trigger (x ATR)", step=0.25, group=grpD)
+volGate    = input.float(1.0, "S2 min volume vs prior-20 avg", step=0.1, group=grpD)
+
+grpS4     = "S4 oversold snapback (long only)"
+rsiMax    = input.float(15.0, "RSI(3) max", group=grpS4)
+streakMin = input.int(4, "Alt trigger: down-close streak", group=grpS4)
+
+grpB      = "Benchmark regime"
+benchSym  = input.symbol("SPY", "Benchmark (SPY / XJO proxy / NIFTY proxy)", group=grpB)
+showBench = input.bool(true, "Shade background on bench STAND-DOWN", group=grpB)
 
 grpV = "Visuals"
 showLvls = input.bool(true, "Show weekly S/R lines", group=grpV)
@@ -38,9 +61,8 @@ showLvls = input.bool(true, "Show weekly S/R lines", group=grpV)
 [wphH, wplL] = request.security(syminfo.tickerid, "W",
      [ta.pivothigh(high, leftW, rightW), ta.pivotlow(low, leftW, rightW)],
      lookahead=barmerge.lookahead_off)
-
-wEmaF     = request.security(syminfo.tickerid, "W", ta.ema(close, fastW), lookahead=barmerge.lookahead_off)
-wEmaS     = request.security(syminfo.tickerid, "W", ta.ema(close, slowW), lookahead=barmerge.lookahead_off)
+wEmaF     = request.security(syminfo.tickerid, "W", ta.ema(close, fastW),    lookahead=barmerge.lookahead_off)
+wEmaS     = request.security(syminfo.tickerid, "W", ta.ema(close, slowW),    lookahead=barmerge.lookahead_off)
 wEmaFprev = request.security(syminfo.tickerid, "W", ta.ema(close, fastW)[1], lookahead=barmerge.lookahead_off)
 
 var float lastRes = na
@@ -54,62 +76,101 @@ upTrend = wEmaF > wEmaS and wEmaF > wEmaFprev
 dnTrend = wEmaF < wEmaS and wEmaF < wEmaFprev
 
 // ---------------- daily primitives ----------------
-atrD  = ta.atr(atrLen)
-ema_d = ta.ema(close, emaD)
-donHi = ta.highest(high, breakoutN)[1]
-donLo = ta.lowest(low, breakoutN)[1]
+atrD   = ta.atr(atrLen)
+ema_d  = ta.ema(close, emaD)
+donHi  = ta.highest(high, breakoutN)[1]
+donLo  = ta.lowest(low, breakoutN)[1]
+volAvg = ta.sma(volume, 20)[1]                  // prior-20 (excludes today)
+volx   = volAvg > 0 ? volume / volAvg : 0.0
+sma200 = ta.sma(close, 200)
+rsi3   = ta.rsi(close, 3)
+priorMed = ta.median(close, apprBars)[1]        // median of the prior N closes
+
+var int dnStreak = 0
+dnStreak := close < close[1] ? dnStreak + 1 : 0
 
 body  = math.abs(close - open)
 upSh  = high - math.max(open, close)
 loSh  = math.min(open, close) - low
 bullC = close > open
 bearC = open > close
+barRangeOK = (high - low) >= minBarAtr * atrD   // 1-bar patterns need a real bar
 
-// ---------------- candlestick reversals ----------------
+// ---------------- candlestick reversals (evening_star retired) ----------------
 bullEngulf = bullC and (close[1] < open[1]) and close >= open[1] and open <= close[1]
 bearEngulf = bearC and (close[1] > open[1]) and open >= close[1] and close <= open[1]
-hammer     = loSh >= 2 * body and upSh <= body and body > 0
-shooting   = upSh >= 2 * body and loSh <= body and body > 0
+hammer     = barRangeOK and loSh >= 2 * body and upSh <= body and body > 0
+shooting   = barRangeOK and upSh >= 2 * body and loSh <= body and body > 0
 piercing   = (close[1] < open[1]) and bullC and open < close[1] and close > (open[1] + close[1]) / 2 and close < open[1]
 darkCloud  = (close[1] > open[1]) and bearC and open > close[1] and close < (open[1] + close[1]) / 2 and close > open[1]
 mornStar   = (close[2] < open[2]) and (math.abs(close[1] - open[1]) < math.abs(close[2] - open[2]) * 0.5) and bullC and close > (open[2] + close[2]) / 2
-eveStar    = (close[2] > open[2]) and (math.abs(close[1] - open[1]) < math.abs(close[2] - open[2]) * 0.5) and bearC and close < (open[2] + close[2]) / 2
-tweezBot   = (close[1] < open[1]) and bullC and math.abs(low - low[1])  <= low  * 0.001
-tweezTop   = (close[1] > open[1]) and bearC and math.abs(high - high[1]) <= high * 0.001
+tweezBot   = barRangeOK and (close[1] < open[1]) and bullC and math.abs(low - low[1])  <= low  * 0.001
+tweezTop   = barRangeOK and (close[1] > open[1]) and bearC and math.abs(high - high[1]) <= high * 0.001
 
 bullRev = bullEngulf or hammer or piercing or mornStar or tweezBot
-bearRev = bearEngulf or shooting or darkCloud or eveStar or tweezTop
+bearRev = bearEngulf or shooting or darkCloud or tweezTop
 
-// ---------------- pullback state ----------------
+// ---------------- S1: reversal at weekly level (approach + wick gates) ----------------
+band = atrD * nearAtr
+wick = band * wickFrac
+hold = band * holdFrac
+
+s1Long  = not na(lastSup) and bullRev and priorMed > lastSup and low <= lastSup + wick and close >= lastSup - hold and close <= lastSup + band
+s1Short = not na(lastRes) and bearRev and priorMed < lastRes and high >= lastRes - wick and close <= lastRes + hold and close >= lastRes - band
+
+// ---------------- S2: fresh, unextended, volume-confirmed breakout ----------------
 pulledUp = ta.barssince(low  <= ema_d) <= pullbackLk and close > ema_d
 pulledDn = ta.barssince(high >= ema_d) <= pullbackLk and close < ema_d
 
-// ---------------- signals ----------------
-band   = atrD * nearAtr
-s1Long  = not na(lastSup) and math.abs(close - lastSup) <= band and close >= lastSup and bullRev
-s1Short = not na(lastRes) and math.abs(close - lastRes) <= band and close <= lastRes and bearRev
-s2Long  = upTrend and pulledUp and close > donHi
-s2Short = dnTrend and pulledDn and close < donLo
+crossUp  = close > donHi and close[1] <= donHi[1]
+crossDn  = close < donLo and close[1] >= donLo[1]
+ageUp    = ta.barssince(crossUp)
+ageDn    = ta.barssince(crossDn)
+extUp    = atrD > 0 ? (close - donHi) / atrD : 99.0
+extDn    = atrD > 0 ? (donLo - close) / atrD : 99.0
+
+s2Long  = upTrend and pulledUp and close > donHi and not na(ageUp) and ageUp <= maxAge and extUp <= maxExtAtr and volx >= volGate
+s2Short = dnTrend and pulledDn and close < donLo and not na(ageDn) and ageDn <= maxAge and extDn <= maxExtAtr and volx >= volGate
+
+// ---------------- S4: oversold snapback (long only; backtest-promoted) ----------------
+s4RsiTrig    = rsi3 < rsiMax and dnStreak >= 2
+s4StreakTrig = dnStreak >= streakMin
+s4Long = not na(sma200) and close > sma200 and (s4RsiTrig or s4StreakTrig)
+
+// ---------------- benchmark stand-down (S1/S2 only; S4 exempt) ----------------
+bClose = request.security(benchSym, "D", close,               lookahead=barmerge.lookahead_off)
+bEmaF  = request.security(benchSym, "D", ta.ema(close, 20),   lookahead=barmerge.lookahead_off)
+bEmaS  = request.security(benchSym, "D", ta.ema(close, 50),   lookahead=barmerge.lookahead_off)
+bEmaF5 = request.security(benchSym, "D", ta.ema(close, 20)[5], lookahead=barmerge.lookahead_off)
+benchBear = bEmaF < bEmaS and bClose < bEmaF and bEmaF < bEmaF5
+bgcolor(showBench and benchBear ? color.new(color.red, 92) : na, title="Bench STAND-DOWN (S1/S2)")
 
 // ---------------- visuals ----------------
-plot(showLvls ? lastSup : na, "Wk Support", color=color.new(color.teal, 0), style=plot.style_linebr, linewidth=1)
+plot(showLvls ? lastSup : na, "Wk Support",    color=color.new(color.teal, 0),   style=plot.style_linebr, linewidth=1)
 plot(showLvls ? lastRes : na, "Wk Resistance", color=color.new(color.maroon, 0), style=plot.style_linebr, linewidth=1)
 
 plotshape(s1Long,  title="S1 Long",  location=location.belowbar, style=shape.triangleup,   color=color.teal,   size=size.small, text="S1")
 plotshape(s1Short, title="S1 Short", location=location.abovebar, style=shape.triangledown, color=color.maroon, size=size.small, text="S1")
 plotshape(s2Long,  title="S2 Long",  location=location.belowbar, style=shape.labelup,      color=color.green,  size=size.small, text="S2")
 plotshape(s2Short, title="S2 Short", location=location.abovebar, style=shape.labeldown,    color=color.red,    size=size.small, text="S2")
+plotshape(s4Long,  title="S4 Long",  location=location.belowbar, style=shape.diamond,      color=color.lime,   size=size.small, text="S4")
 
-// ---------------- Pine Screener columns (read in data window) ----------------
+// ---------------- Pine Screener columns ----------------
 plot(s1Long  ? 1 : 0, "S1_Long",  display=display.data_window)
 plot(s1Short ? 1 : 0, "S1_Short", display=display.data_window)
 plot(s2Long  ? 1 : 0, "S2_Long",  display=display.data_window)
 plot(s2Short ? 1 : 0, "S2_Short", display=display.data_window)
-plot((s1Long or s1Short or s2Long or s2Short) ? 1 : 0, "AnySignal", display=display.data_window)
+plot(s4Long  ? 1 : 0, "S4_Long",  display=display.data_window)
+plot((s1Long or s1Short or s2Long or s2Short or s4Long) ? 1 : 0, "AnySignal", display=display.data_window)
 plot(upTrend ? 1 : (dnTrend ? -1 : 0), "WeeklyTrend", display=display.data_window)
+plot(benchBear ? 1 : 0, "BenchBear", display=display.data_window)
+plot(rsi3,               "RSI3",     display=display.data_window)
+plot(dnStreak,           "DnStreak", display=display.data_window)
+plot(volx,               "VolX",     display=display.data_window)
 
 // ---------------- alerts ----------------
-alertcondition(s1Long,  "S1 reversal long",  "S1 reversal long at weekly support")
-alertcondition(s1Short, "S1 reversal short", "S1 reversal short at weekly resistance")
-alertcondition(s2Long,  "S2 breakout long",  "S2 pullback breakout (weekly uptrend)")
-alertcondition(s2Short, "S2 breakdown short","S2 breakdown (weekly downtrend)")
+alertcondition(s1Long,  "S1 reversal long",   "S1 reversal long at weekly support")
+alertcondition(s1Short, "S1 reversal short",  "S1 reversal short at weekly resistance")
+alertcondition(s2Long,  "S2 breakout long",   "S2 fresh pullback breakout (weekly uptrend)")
+alertcondition(s2Short, "S2 breakdown short", "S2 fresh breakdown (weekly downtrend)")
+alertcondition(s4Long,  "S4 snapback long",   "S4 oversold snapback above 200SMA")

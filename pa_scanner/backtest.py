@@ -118,8 +118,11 @@ def _daily_arrays(d):
     A["prior_med"] = c.rolling(CFG.s1_approach_bars).median().shift(1).to_numpy()
     A["sma200"] = c.rolling(200).mean().to_numpy()
     A["rsi3"] = ind.rsi(c, 3).to_numpy()
-    dn1 = (c < c.shift(1))
-    A["down2"] = (dn1 & dn1.shift(1).fillna(False)).to_numpy()
+    dnv = (c < c.shift(1)).to_numpy()
+    streak = np.zeros(len(c), int)
+    for _i in range(1, len(c)):
+        streak[_i] = streak[_i - 1] + 1 if dnv[_i] else 0
+    A["dn_streak"] = streak
 
     # donchian cross ages
     ok_hi = don_hi.notna() & don_hi.shift(1).notna()
@@ -230,7 +233,7 @@ def ctx_at(ticker, d, A, WT, t):
         s3_edge_closes=edge_closes,
         sma200=(float(A["sma200"][t]) if not np.isnan(A["sma200"][t]) else None),
         rsi3=float(A["rsi3"][t]),
-        down2=bool(A["down2"][t]),
+        dn_streak=int(A["dn_streak"][t]),
     )
 
 

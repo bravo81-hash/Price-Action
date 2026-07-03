@@ -55,7 +55,7 @@ class SymbolContext:
     # --- S4 oversold snapback context ---
     sma200: Optional[float] = None  # 200d simple MA (None until 200 bars)
     rsi3: Optional[float] = None    # Wilder RSI(3)
-    down2: bool = False             # two consecutive down closes into today
+    dn_streak: int = 0              # consecutive down closes ending at today
 
 
 def _clip01(x):
@@ -159,7 +159,10 @@ def prepare_context(ticker, daily, weekly):
     sma200_s = c.rolling(200).mean()
     sma200_v = float(sma200_s.iloc[-1]) if not np.isnan(sma200_s.iloc[-1]) else None
     rsi3_v = float(ind.rsi(c, 3).iloc[-1])
-    down2_v = bool(len(c) >= 3 and c.iloc[-1] < c.iloc[-2] < c.iloc[-3])
+    streak_v, _i = 0, len(c) - 1
+    while _i > 0 and c.iloc[_i] < c.iloc[_i - 1]:
+        streak_v += 1
+        _i -= 1
 
     # S3 range / chop metrics
     price = float(last["close"])
@@ -196,7 +199,7 @@ def prepare_context(ticker, daily, weekly):
         last_low=float(last["low"]), last_high=float(last["high"]),
         prior_med=prior_med, s2_age_up=age_up, s2_age_dn=age_dn,
         s3_edge_closes=s3_edge_closes,
-        sma200=sma200_v, rsi3=rsi3_v, down2=down2_v,
+        sma200=sma200_v, rsi3=rsi3_v, dn_streak=streak_v,
     )
 
 
@@ -278,7 +281,7 @@ def add_market_context(rows, bundle, bench_daily=None, market="us"):
             adj += CFG.rs_adj_max * (p - 50) / 50
         elif r["side"] == "short":
             adj += CFG.rs_adj_max * (50 - p) / 50
-        if binfo:
+        if binfo and r.get("signal") != "S4":   # S4/MR thrives in bearish regimes
             if r["side"] == "long" and binfo["bias"] == "bearish":
                 adj -= CFG.index_penalty
             elif r["side"] == "short" and binfo["bias"] == "bullish":
@@ -333,8 +336,9 @@ def add_exit_levels(rows, market="us"):
         if not atr or not last:
             r["stop"], r["tgt"] = None, None
             continue
-        position = (market == "in" and r.get("signal") == "S2"
-                    and r.get("side") == "long")
+        position = ((market == "in" and r.get("signal") == "S2"
+                     and r.get("side") == "long")
+                    or (market == "asx" and r.get("signal") == "S4"))
         stop_k = CFG.in_pos_stop_atr if position else CFG.exit_stop_atr
         tgt_k = CFG.in_pos_tgt_atr if position else CFG.exit_target_atr
         if r["side"] == "long":

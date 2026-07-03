@@ -124,6 +124,7 @@ markets. Full per-slice tables live in <code>backtest/report_&lt;mkt&gt;.md</cod
 <li><span class="neu">PBEMA near-miss</span> (US 63d t=2.33, ASX 1.65 — below bar): parked in candidates.py for a future out-of-sample re-test.</li>
 <li><span class="neg">NH52, HVOL, GAPD failed</span>; candidate shorts were harmful everywhere (US all-shorts t=−3.9) — no short setups added.</li>
 <li>RS≥70 conditioning replicated in both markets (t=2.26 / 1.96), reinforcing the RS layer.</li>
+<li><b>Round 2 (OSMR family)</b>: STRK4 (4+ down closes) cleared the bar (US 5d t=3.17, ASX t=2.73 + ASX 21–63d persistence) and was folded into S4 as a second trigger. OSMR2 settled the parameter test — RSI(2) lost to RSI(3) in the US, so S4 keeps RSI(3)&lt;15. LO7/BBMR/IBSMR failed. Replicated regime findings: bench-bearish supercharges MR (US +5.57% @63d t=9.37, ASX +4.09% t=6.96 → S4 exempt from stand-down and the counter-index penalty); ASX MR excess grows with horizon (→ ASX S4 position template); rich vol preferred (t=2.86/5.65).</li>
 </ul></div>
 
 <div class="card"><b>Kept vs. changed</b> (round-1 and round-2 decisions from the 2y and 5y runs):
@@ -151,9 +152,11 @@ tags the zone — a rally poking above resistance does not count as "support."</
 channel with volume confirmation. Must be fresh (≤1 bar old) and not already extended
 &gt;1.5 ATR past the trigger — stale, chased breakouts are excluded.</td></tr>
 <tr><td><b>S4</b></td><td>Oversold snapback</td>
-<td>Long-only mean reversion: name above its 200SMA flushed hard (RSI(3) &lt; 15, two consecutive
-down closes) tends to bounce within ~5 bars. Backtest-promoted (US 5d t=3.44, replicated ASX
-t=2.13) — the only directional setup in the app that cleared the promotion bar. 5-bar time exit.</td></tr>
+<td>Long-only mean reversion above the 200SMA. Two backtest-promoted triggers: RSI(3) &lt; 15 with
+2+ down closes (round 1: US 5d t=3.44, ASX t=2.13), or a 4+ consecutive-down-close flush
+(round 2: US t=3.17, ASX t=2.73). US: 5-bar time exit. ASX: position template (3.5/4.5×ATR,
+63 bars — excess grows with horizon there). Exempt from the STAND-DOWN banner: MR outperforms
+in bearish regimes (+5.6% US / +4.1% ASX excess @63d).</td></tr>
 <tr><td><b>S3</b></td><td>Range / chop (neutral)</td>
 <td>Low ADX, flat weekly EMAs, price mid-range, no boundary-pressing closes (which would mean
 coiling, not chopping). Validated in the backtest as genuine low-realized-move selection in
@@ -417,7 +420,7 @@ function applyData(d){
   $("#counts").textContent = `universe ${d.universe??"?"} · liquid ${d.scanned??"?"} · signals ${d.count??ROWS.length}${bench}`;
   const b0=$("#banner");
   if(d.bench && d.bench.bias==="bearish"){
-    b0.textContent = `⚠ STAND-DOWN — ${d.bench.symbol} regime bearish. 5y study: all signals −0.63% excess (t=−4.0). Reduce size / stand aside.`;
+    b0.textContent = `⚠ STAND-DOWN — ${d.bench.symbol} regime bearish. Trend entries (S1/S2): −0.63% excess (t=−4.0) — reduce size / stand aside. S4 snapbacks EXEMPT: mean reversion outperforms in bearish regimes (+5.6% US / +4.1% ASX excess @63d).`;
     b0.style.display="block";
   } else if(!d.note){ b0.style.display="none"; }
   const b=$("#banner");

@@ -210,11 +210,15 @@ class OversoldSnapback:
             return Signal(False, None, 0.0, "")
         if ctx.last_close <= ctx.sma200:
             return Signal(False, None, 0.0, "")
-        if ctx.rsi3 >= CFG.s4_rsi_max or not ctx.down2:
+        rsi_trig = ctx.rsi3 < CFG.s4_rsi_max and ctx.dn_streak >= 2
+        streak_trig = ctx.dn_streak >= CFG.s4_streak_min   # round-2 promoted (STRK4)
+        if not (rsi_trig or streak_trig):
             return Signal(False, None, 0.0, "")
-        score = _clip01(0.55 + (CFG.s4_rsi_max - ctx.rsi3) / 100.0)
+        score = _clip01(0.55 + max(0.0, CFG.s4_rsi_max - ctx.rsi3) / 100.0
+                        + 0.03 * min(max(ctx.dn_streak - 2, 0), 3))
+        lbl = (f"RSI3 {ctx.rsi3:.0f}" if rsi_trig else f"{ctx.dn_streak}-day flush")
         return Signal(True, "long", score,
-                      f"RSI3 {ctx.rsi3:.0f} snapback above 200SMA",
+                      f"{lbl} snapback above 200SMA",
                       {"level": round(ctx.sma200, 2),
-                       "rsi3": round(ctx.rsi3, 1),
+                       "rsi3": round(ctx.rsi3, 1), "streak": ctx.dn_streak,
                        "dist_atr": round((ctx.last_close - ctx.sma200) / ctx.atr_last, 2)})
