@@ -1,0 +1,310 @@
+//@version=6
+// =====================================================================
+//  PA Strategy Tester — backtest any single pa_scanner rule on any
+//  TradingView ticker using the Strategy Tester tab.
+//
+//  Pick a strategy + market template from the dropdowns; entry logic and
+//  exit templates mirror the live pa_scanner engine and the 5y backtest
+//  program exactly (same formulas as pa_confirm.pine v2):
+//
+//    S1  Reversal at weekly level   - approach-direction + wick-tag gates
+//    S2  Trend pullback breakout    - freshness / volume / extension gates
+//    S3  Range fade (PROXY)         - see note below, this is NOT the
+//                                      app's validated edge
+//    S4  Oversold snapback (LONG)   - the one setup that cleared the
+//                                      promotion bar; dual trigger
+//
+//  S3 NOTE: the app's actual validated S3 edge is quiet-name SELECTION
+//  for OPTIONS PREMIUM SELLING (confirmed range -> sell a condor/calendar
+//  with strikes at the range edges) - that is not a stock long/short trade
+//  and cannot be represented in the Strategy Tester. "S3 Range Fade" here
+//  is a PROXY for illustration only: long at the range low, short at the
+//  range high, targeting the opposite edge. Do not treat its backtest
+//  numbers as validation of the app's S3 finding.
+//
+//  Exit templates (locked in at entry, from the 5y study):
+//    S1              : 2.0x ATR stop / 1.5x ATR target / 10-bar time exit
+//    S2 (US/ASX,
+//        India short) : 2.0x ATR / 1.5x ATR / 10 bars
+//    S2 India long    : 3.5x ATR / 4.5x ATR / 63 bars  (position template)
+//    S3 (proxy)       : opposite range edge / edge +/- ATR buffer / 10 bars
+//    S4 (US, India)   : 2.0x ATR / 1.5x ATR / 5 bars
+//    S4 ASX           : 3.5x ATR / 4.5x ATR / 63 bars  (position template)
+//
+//  Bench STAND-DOWN: trend entries (S1/S2) carried -0.63% excess (t=-4.0)
+//  when the benchmark regime read bearish; optionally block them below.
+//  S4 is EXEMPT (mean reversion outperforms in bearish regimes, replicated
+//  in both US and ASX) and is never blocked by this filter.
+//
+//  Run on the DAILY timeframe. process_orders_on_close=true fills entries
+//  at the signal bar's own close (matching the app's convention) rather
+//  than the next bar's open - be aware this is a form of same-bar fill
+//  assumption common to this style of backtest, not true next-bar timing.
+// =====================================================================
+strategy("PA Strategy Tester", overlay=true, process_orders_on_close=true,
+     default_qty_type=strategy.percent_of_equity, default_qty_value=10,
+     commission_type=strategy.commission.percent, commission_value=0.05,
+     pyramiding=0, calc_on_every_tick=false)
+
+// ---------------- strategy / market selectors ----------------
+grpS = "Strategy select"
+stratSel = input.string("S4 Oversold Snapback", "Strategy",
+     options=["S1 Reversal", "S2 Pullback Breakout", "S3 Range Fade (PROXY)", "S4 Oversold Snapback"], group=grpS)
+mktSel   = input.string("US", "Market template (exit sizing)", options=["US", "ASX", "India"], group=grpS)
+sideSel  = input.string("Both", "Side (S1/S2/S3 only - S4 is always long)", options=["Both", "Long only", "Short only"], group=grpS)
+onlyFlat = input.bool(true, "Only one open trade at a time", group=grpS)
+blockStandDown = input.bool(false, "Block S1/S2 entries during bench STAND-DOWN", group=grpS)
+
+// ---------------- weekly trend / levels (S1, S2) ----------------
+grpW   = "Weekly trend / levels"
+fastW  = input.int(10, "Weekly EMA fast", group=grpW)
+slowW  = input.int(30, "Weekly EMA slow", group=grpW)
+leftW  = input.int(2,  "Weekly pivot left", group=grpW)
+rightW = input.int(2,  "Weekly pivot right", group=grpW)
+
+// ---------------- daily engine params ----------------
+grpD       = "Daily signals"
+atrLen     = input.int(14,   "ATR length", group=grpD)
+nearAtr    = input.float(1.0, "S1 near band (x ATR)", step=0.25, group=grpD)
+wickFrac   = input.float(0.5, "S1 wick reach (x band)", step=0.25, group=grpD)
+holdFrac   = input.float(0.5, "S1 close hold (x band)", step=0.25, group=grpD)
+apprBars   = input.int(10,   "S1 approach bars (prior close median)", group=grpD)
+minBarAtr  = input.float(0.5, "S1 min bar range for 1-bar patterns (x ATR)", step=0.25, group=grpD)
+breakoutN  = input.int(7,    "S2 breakout window (Donchian)", group=grpD)
+pullbackLk = input.int(10,   "S2 pullback lookback (bars)", group=grpD)
+emaD       = input.int(20,   "Daily EMA (pullback ref)", group=grpD)
+maxAge     = input.int(1,    "S2 max breakout age (bars)", group=grpD)
+maxExtAtr  = input.float(1.5, "S2 max extension past trigger (x ATR)", step=0.25, group=grpD)
+volGate    = input.float(1.0, "S2 min volume vs prior-20 avg", step=0.1, group=grpD)
+
+grpS3      = "S3 range fade (PROXY - see note above)"
+adxMax     = input.float(20.0, "ADX max (not trending)", group=grpS3)
+flatPct    = input.float(0.015, "EMA20/50 flat threshold (pct of price)", step=0.005, group=grpS3)
+widthMin   = input.float(0.04, "Range width min (pct of price)", step=0.01, group=grpS3)
+widthMax   = input.float(0.25, "Range width max (pct of price)", step=0.01, group=grpS3)
+s3Window   = input.int(20,   "Range window (bars)", group=grpS3)
+edgeFrac   = input.float(0.10, "Edge band (x range width)", step=0.05, group=grpS3)
+s3TimeBars = input.int(10,   "S3 time exit (bars)", group=grpS3)
+s3StopBuf  = input.float(1.0, "S3 stop buffer beyond edge (x ATR)", step=0.25, group=grpS3)
+
+grpS4     = "S4 oversold snapback (long only)"
+rsiMax    = input.float(15.0, "RSI(3) max", group=grpS4)
+streakMin = input.int(4, "Alt trigger: down-close streak", group=grpS4)
+
+grpB      = "Benchmark regime"
+benchSym  = input.symbol("SPY", "Benchmark (SPY / XJO proxy / NIFTY proxy)", group=grpB)
+showBench = input.bool(true, "Shade background on bench STAND-DOWN", group=grpB)
+
+grpR = "Risk override"
+useOverride = input.bool(false, "Override exit template below (ignores market/strategy defaults)", group=grpR)
+customSL    = input.float(2.0, "Custom SL (x ATR)", step=0.25, group=grpR)
+customPT    = input.float(1.5, "Custom PT (x ATR)", step=0.25, group=grpR)
+customTime  = input.int(10,  "Custom time exit (bars)", group=grpR)
+
+grpV = "Visuals"
+showLvls = input.bool(true, "Show weekly S/R lines", group=grpV)
+
+// ---------------- weekly data (no repaint) ----------------
+[wphH, wplL] = request.security(syminfo.tickerid, "W",
+     [ta.pivothigh(high, leftW, rightW), ta.pivotlow(low, leftW, rightW)],
+     lookahead=barmerge.lookahead_off)
+wEmaF     = request.security(syminfo.tickerid, "W", ta.ema(close, fastW),    lookahead=barmerge.lookahead_off)
+wEmaS     = request.security(syminfo.tickerid, "W", ta.ema(close, slowW),    lookahead=barmerge.lookahead_off)
+wEmaFprev = request.security(syminfo.tickerid, "W", ta.ema(close, fastW)[1], lookahead=barmerge.lookahead_off)
+
+var float lastRes = na
+var float lastSup = na
+if not na(wphH)
+    lastRes := wphH
+if not na(wplL)
+    lastSup := wplL
+
+upTrend = wEmaF > wEmaS and wEmaF > wEmaFprev
+dnTrend = wEmaF < wEmaS and wEmaF < wEmaFprev
+
+// ---------------- daily primitives ----------------
+atrD   = ta.atr(atrLen)
+ema_d  = ta.ema(close, emaD)
+donHi  = ta.highest(high, breakoutN)[1]
+donLo  = ta.lowest(low, breakoutN)[1]
+volAvg = ta.sma(volume, 20)[1]
+volx   = volAvg > 0 ? volume / volAvg : 0.0
+sma200 = ta.sma(close, 200)
+rsi3   = ta.rsi(close, 3)
+priorMed = ta.median(close, apprBars)[1]
+
+var int dnStreak = 0
+dnStreak := close < close[1] ? dnStreak + 1 : 0
+
+body  = math.abs(close - open)
+upSh  = high - math.max(open, close)
+loSh  = math.min(open, close) - low
+bullC = close > open
+bearC = open > close
+barRangeOK = (high - low) >= minBarAtr * atrD
+
+// ---------------- candlestick reversals (evening_star retired) ----------------
+bullEngulf = bullC and (close[1] < open[1]) and close >= open[1] and open <= close[1]
+bearEngulf = bearC and (close[1] > open[1]) and open >= close[1] and close <= open[1]
+hammer     = barRangeOK and loSh >= 2 * body and upSh <= body and body > 0
+shooting   = barRangeOK and upSh >= 2 * body and loSh <= body and body > 0
+piercing   = (close[1] < open[1]) and bullC and open < close[1] and close > (open[1] + close[1]) / 2 and close < open[1]
+darkCloud  = (close[1] > open[1]) and bearC and open > close[1] and close < (open[1] + close[1]) / 2 and close > open[1]
+mornStar   = (close[2] < open[2]) and (math.abs(close[1] - open[1]) < math.abs(close[2] - open[2]) * 0.5) and bullC and close > (open[2] + close[2]) / 2
+tweezBot   = barRangeOK and (close[1] < open[1]) and bullC and math.abs(low - low[1])  <= low  * 0.001
+tweezTop   = barRangeOK and (close[1] > open[1]) and bearC and math.abs(high - high[1]) <= high * 0.001
+
+bullRev = bullEngulf or hammer or piercing or mornStar or tweezBot
+bearRev = bearEngulf or shooting or darkCloud or tweezTop
+
+// ---------------- S1: reversal at weekly level ----------------
+band = atrD * nearAtr
+wick = band * wickFrac
+hold = band * holdFrac
+
+s1LongCond  = not na(lastSup) and bullRev and priorMed > lastSup and low <= lastSup + wick and close >= lastSup - hold and close <= lastSup + band
+s1ShortCond = not na(lastRes) and bearRev and priorMed < lastRes and high >= lastRes - wick and close <= lastRes + hold and close >= lastRes - band
+
+// ---------------- S2: fresh, unextended, volume-confirmed breakout ----------------
+pulledUp = ta.barssince(low  <= ema_d) <= pullbackLk and close > ema_d
+pulledDn = ta.barssince(high >= ema_d) <= pullbackLk and close < ema_d
+
+crossUp  = close > donHi and close[1] <= donHi[1]
+crossDn  = close < donLo and close[1] >= donLo[1]
+ageUp    = ta.barssince(crossUp)
+ageDn    = ta.barssince(crossDn)
+extUp    = atrD > 0 ? (close - donHi) / atrD : 99.0
+extDn    = atrD > 0 ? (donLo - close) / atrD : 99.0
+
+s2LongCond  = upTrend and pulledUp and close > donHi and not na(ageUp) and ageUp <= maxAge and extUp <= maxExtAtr and volx >= volGate
+s2ShortCond = dnTrend and pulledDn and close < donLo and not na(ageDn) and ageDn <= maxAge and extDn <= maxExtAtr and volx >= volGate
+
+// ---------------- S3: range fade (PROXY - not the app's validated edge) ----------------
+rangeHi   = ta.highest(high, s3Window)
+rangeLo   = ta.lowest(low, s3Window)
+rangeMid  = (rangeHi + rangeLo) / 2.0
+widthPct  = close > 0 ? (rangeHi - rangeLo) / close : 0.0
+emaSepPct = close > 0 ? math.abs(ema_d - ta.ema(close, 50)) / close : 1.0
+[diP, diM, adxV] = ta.dmi(14, 14)
+edgeBand  = edgeFrac * (rangeHi - rangeLo)
+
+s3RegimeOK = adxV < adxMax and emaSepPct <= flatPct and widthPct >= widthMin and widthPct <= widthMax
+s3LongCond  = s3RegimeOK and close <= rangeLo + edgeBand
+s3ShortCond = s3RegimeOK and close >= rangeHi - edgeBand
+
+// ---------------- S4: oversold snapback (long only; backtest-promoted) ----------------
+s4RsiTrig    = rsi3 < rsiMax and dnStreak >= 2
+s4StreakTrig = dnStreak >= streakMin
+s4LongCond = not na(sma200) and close > sma200 and (s4RsiTrig or s4StreakTrig)
+
+// ---------------- benchmark stand-down (S1/S2 only; S4 exempt) ----------------
+bClose = request.security(benchSym, "D", close,                lookahead=barmerge.lookahead_off)
+bEmaF  = request.security(benchSym, "D", ta.ema(close, 20),    lookahead=barmerge.lookahead_off)
+bEmaS  = request.security(benchSym, "D", ta.ema(close, 50),    lookahead=barmerge.lookahead_off)
+bEmaF5 = request.security(benchSym, "D", ta.ema(close, 20)[5], lookahead=barmerge.lookahead_off)
+benchBear = bEmaF < bEmaS and bClose < bEmaF and bEmaF < bEmaF5
+bgcolor(showBench and benchBear ? color.new(color.red, 92) : na, title="Bench STAND-DOWN (S1/S2)")
+
+// ---------------- route the selected strategy ----------------
+isS1 = stratSel == "S1 Reversal"
+isS2 = stratSel == "S2 Pullback Breakout"
+isS3 = stratSel == "S3 Range Fade (PROXY)"
+isS4 = stratSel == "S4 Oversold Snapback"
+
+rawLong  = isS1 ? s1LongCond  : isS2 ? s2LongCond  : isS3 ? s3LongCond  : isS4 ? s4LongCond : false
+rawShort = isS1 ? s1ShortCond : isS2 ? s2ShortCond : isS3 ? s3ShortCond : false   // S4 has no short
+
+allowLong  = sideSel != "Short only"
+allowShort = sideSel != "Long only"
+warmupOK   = bar_index > 260   // covers S4's 200SMA + S1's weekly-pivot lookback
+
+sdBlockLong  = blockStandDown and benchBear and (isS1 or isS2)
+sdBlockShort = blockStandDown and benchBear and (isS1 or isS2)
+
+canEnterNow = not onlyFlat or strategy.position_size == 0
+
+finalLong  = rawLong  and allowLong  and not sdBlockLong  and warmupOK and canEnterNow
+finalShort = rawShort and allowShort and not sdBlockShort and warmupOK and canEnterNow
+
+// ---------------- exit template (locked in at entry) ----------------
+isIndia = mktSel == "India"
+isASX   = mktSel == "ASX"
+
+slAtrLong = 2.0
+ptAtrLong = 1.5
+timeLong  = 10
+slAtrShort = 2.0
+ptAtrShort = 1.5
+timeShort  = 10
+
+if useOverride
+    slAtrLong := customSL
+    ptAtrLong := customPT
+    timeLong  := customTime
+    slAtrShort := customSL
+    ptAtrShort := customPT
+    timeShort  := customTime
+else if isS2 and isIndia
+    slAtrLong := 3.5
+    ptAtrLong := 4.5
+    timeLong  := 63
+else if isS4 and isASX
+    slAtrLong := 3.5
+    ptAtrLong := 4.5
+    timeLong  := 63
+else if isS4
+    timeLong := 5
+
+// ---------------- entries + managed exits ----------------
+var float lockedStopLong = na
+var float lockedTgtLong  = na
+var int   lockedTimeLong = na
+var int   entryBarLong   = na
+
+var float lockedStopShort = na
+var float lockedTgtShort  = na
+var int   lockedTimeShort = na
+var int   entryBarShort   = na
+
+if finalLong
+    strategy.entry("Long", strategy.long)
+    entryBarLong := bar_index
+    if isS3
+        lockedStopLong := rangeLo - s3StopBuf * atrD
+        lockedTgtLong  := rangeHi
+        lockedTimeLong := s3TimeBars
+    else
+        lockedStopLong := close - slAtrLong * atrD
+        lockedTgtLong  := close + ptAtrLong * atrD
+        lockedTimeLong := timeLong
+
+if finalShort
+    strategy.entry("Short", strategy.short)
+    entryBarShort := bar_index
+    if isS3
+        lockedStopShort := rangeHi + s3StopBuf * atrD
+        lockedTgtShort  := rangeLo
+        lockedTimeShort := s3TimeBars
+    else
+        lockedStopShort := close + slAtrShort * atrD
+        lockedTgtShort  := close - ptAtrShort * atrD
+        lockedTimeShort := timeShort
+
+if strategy.position_size > 0
+    strategy.exit("XL", from_entry="Long", stop=lockedStopLong, limit=lockedTgtLong)
+    if not na(entryBarLong) and (bar_index - entryBarLong) >= lockedTimeLong
+        strategy.close("Long", comment="Time Exit")
+
+if strategy.position_size < 0
+    strategy.exit("XS", from_entry="Short", stop=lockedStopShort, limit=lockedTgtShort)
+    if not na(entryBarShort) and (bar_index - entryBarShort) >= lockedTimeShort
+        strategy.close("Short", comment="Time Exit")
+
+// ---------------- visuals ----------------
+plot(showLvls and (isS1 or isS2) ? lastSup : na, "Wk Support",    color=color.new(color.teal, 0),   style=plot.style_linebr, linewidth=1)
+plot(showLvls and (isS1 or isS2) ? lastRes : na, "Wk Resistance", color=color.new(color.maroon, 0), style=plot.style_linebr, linewidth=1)
+plot(isS3 ? rangeHi : na, "Range High", color=color.new(color.orange, 0), style=plot.style_linebr, linewidth=1)
+plot(isS3 ? rangeLo : na, "Range Low",  color=color.new(color.blue, 0),   style=plot.style_linebr, linewidth=1)
+
+plotshape(finalLong,  title="Long entry",  location=location.belowbar, style=shape.triangleup,   color=color.lime, size=size.small)
+plotshape(finalShort, title="Short entry", location=location.abovebar, style=shape.triangledown, color=color.red,  size=size.small)

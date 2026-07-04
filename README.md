@@ -246,6 +246,30 @@ mean reversion (US +5.57% excess @63d t=9.37, ASX +4.09% t=6.96). Rich-vol
 names snap hardest (replicated t=2.86/5.65) — prefer higher-ATR% S4 hits. No
 short mirror — candidate shorts were harmful in every market (US t=−3.9).
 
+## Strategy Tester (backtest any ticker on TradingView)
+
+`pa_strategy_tester.pine` is a combined Pine **strategy** (not just an
+indicator) with dropdowns to pick the rule (S1/S2/S3/S4) and market template
+(US/ASX/India), then run TradingView's Strategy Tester on any ticker. Entry
+logic is copied verbatim from `pa_confirm.pine` v2; exit templates (SL/PT/time
+exit) match the app exactly, including the India S2-long and ASX S4 position
+templates, and a "block during bench STAND-DOWN" toggle for S1/S2 (S4 stays
+exempt). A **Risk override** group lets you punch in custom SL/PT/time values
+instead.
+
+**S3 caveat:** the app's actual validated S3 edge is quiet-name *selection*
+for **options premium selling** (sell a condor/calendar at the range edges),
+which isn't a stock long/short trade and can't be represented in the Strategy
+Tester. The S3 option here is a **fade-the-range proxy** (long at the range
+low, short at the range high) for illustration only — its backtest numbers
+are not validation of the app's S3 finding; treat S3's real edge as the
+quiet-range screen it already is in the scanner.
+
+Fill convention: `process_orders_on_close=true` fills at the signal bar's own
+close (matching the app's "enter at signal close" assumption), not the next
+bar's open — a same-bar-fill assumption to be aware of when comparing results
+to slower, next-bar-open backtests.
+
 ## S4★ PRIME + forward ledger
 
 **PRIME:** when the benchmark regime reads bearish, S4 rows are starred
