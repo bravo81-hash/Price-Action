@@ -223,6 +223,51 @@ target 1.5×ATR, 10-bar time exit.</li>
 <li><b>S3 (neutral)</b> — stop/target show the range low/high as condor short-strike references.</li>
 </ul>
 
+<h2>Trade rules — quick reference</h2>
+
+<div class="card"><b class="mkt">S1 — Reversal at weekly level</b> (all markets · long &amp; short · <span class="neu">context, no measured aggregate alpha</span>)
+<ul>
+<li><b>Setup:</b> price testing a weekly S/R zone (52-week clustered pivots); approach direction confirmed — median of the prior 10 daily closes sits above the zone (support test) or below it (resistance test).</li>
+<li><b>Entry:</b> daily reversal candle on the test bar — engulfing, hammer/shooting star, piercing/dark cloud, morning star, tweezers (1-bar patterns need range ≥ 0.5×ATR). The wick must tag the zone (within 0.5×ATR) and the close must hold — no deeper than 0.5×ATR through it, no further than 1×ATR past it. Enter at/near the signal-day close (last hour).</li>
+<li><b>SL:</b> 2.0×ATR against entry (row <b>Stop</b>). <b>PT:</b> 1.5×ATR (row <b>Tgt</b>), or the next weekly zone if closer. <b>Time exit:</b> 10 bars.</li>
+<li><b>Filters:</b> counter-trend reversals score down; skip US names with earnings ≤ 10d for premium structures; obey the STAND-DOWN banner.</li>
+</ul></div>
+
+<div class="card"><b class="mkt">S2 — Trend pullback breakout</b> (all markets · long &amp; short · <span class="neu">context in US/ASX; India longs validated at 42–63d</span>)
+<ul>
+<li><b>Setup:</b> weekly EMA10 &gt; EMA30 and rising (mirror for shorts), with a pullback that touched the daily EMA20 within the last 10 bars; close back on the trend side of the EMA20.</li>
+<li><b>Entry:</b> daily close breaks the prior-7-day Donchian band, cross ≤ 1 bar old (<b>Age</b> column), extension ≤ 1.5×ATR past the trigger, breakout-bar volume ≥ 1.0× the prior-20 average. Enter at the close.</li>
+<li><b>SL:</b> 2.0×ATR. <b>PT:</b> 1.5×ATR. <b>Time exit:</b> 10 bars.</li>
+<li><b>India S2 BUY (position trade):</b> SL 3.5×ATR · PT 4.5×ATR · time exit <b>63 bars</b> — the app prints these on the row.</li>
+<li><b>US cap:</b> never extend a directional S2 hold past ~21 days (42–63d excess is significantly negative).</li>
+</ul></div>
+
+<div class="card"><b class="mkt">S3 — Range / chop</b> (neutral · US = premium selling; <span class="pos">quiet-name selection validated in all markets</span>)
+<ul>
+<li><b>Setup:</b> ADX &lt; 20, daily EMA20/50 flat (≤1.5% apart), range width 4–25% of price, price mid-range (30–70% position), not coiling (≤1 of the last 3 closes at a range edge), ≥ oscillation across the mid.</li>
+<li><b>Trade (US):</b> short premium — condor/calendar with short strikes referenced to the range edges (row <b>Stop</b> = range low, <b>Tgt</b> = range high). Prefer <b>rich</b> vol state and OK <b>Opt Liq</b>; 30–60 DTE tenors are supported by the data (quietness persists to 63d). Skip if earnings fall inside the tenor.</li>
+<li><b>Exit / manage:</b> exit or adjust on a daily close through either range edge ("broke"); otherwise manage to your premium plan and review at ~10 bars.</li>
+</ul></div>
+
+<div class="card"><b class="mkt">S4 — Oversold snapback</b> (long only · all markets · <span class="pos">backtest-promoted, both triggers</span>)
+<ul>
+<li><b>Setup:</b> close above the 200-day SMA (long-term uptrend intact).</li>
+<li><b>Entry (either trigger):</b> RSI(3) &lt; 15 with ≥ 2 consecutive down closes, <b>or</b> ≥ 4 consecutive down closes regardless of RSI. Enter at the flush-day close (last hour).</li>
+<li><b>US:</b> SL 2.0×ATR · PT 1.5×ATR · time exit <b>5 bars</b> — the edge is 3–10 days; do not linger.</li>
+<li><b>ASX:</b> position template — SL 3.5×ATR · PT 4.5×ATR · time exit <b>63 bars</b> (excess grows with horizon there).</li>
+<li><b>India:</b> standard 2.0×ATR / 1.5×ATR / 10 bars.</li>
+<li><b>S4★ PRIME:</b> bench regime bearish → highest-conviction state (+5.6% US / +4.1% ASX excess @63d). Trade S4 normally (or up-size within plan) while the trend book stands down. Prefer higher-ATR% names — volatile names snap hardest (replicated).</li>
+<li><b>Never short</b> this or any setup here — candidate shorts were harmful in every market.</li>
+</ul></div>
+
+<div class="card"><b>Cross-rule management</b>
+<ul>
+<li>All entries assume the signal-day close; evaluate after the daily close (or via <code>--live</code> in the last hour).</li>
+<li><b>STAND-DOWN banner</b> = reduce/stand aside on S1/S2 trend entries only; S4 is exempt.</li>
+<li>One bar spanning both stop and target counts as a <b>stop</b> (the ledger's conservative convention) — place real orders the same way.</li>
+<li>Exit levels are printed per row (<b>Stop / Tgt / time_exit</b>) — no mental math at entry time.</li>
+</ul></div>
+
 <h2>S4★ PRIME</h2>
 <p>When the benchmark regime reads bearish, S4 rows are starred gold (<b>S4★</b>) and sort to
 the top — that cell is the single strongest result in the entire backtest program (+5.57%
