@@ -270,6 +270,21 @@ close (matching the app's "enter at signal close" assumption), not the next
 bar's open — a same-bar-fill assumption to be aware of when comparing results
 to slower, next-bar-open backtests.
 
+## STFS-EQ imports
+
+Three pieces imported from the earlier `stfs-eq` project (audit verdicts in
+the commit): the **market-state line** (`pa_scanner/snapshot.py`, ported from
+`market_snapshot.py`) shown next to the benchmark regime — five states with
+size guidance, display-only, US uses SPY/QQQ/IWM/^VIX/HYG with graceful
+degradation, ASX/India benchmark-only; the **Qty column** (battle-card sizing:
+`risk_dollars ÷ stop distance`, off by default via `risk_dollars=0`); and the
+**ledger drift analysis** (`analyze_journal` pattern): per-rule
+win%/payoff/expectancy, monthly drift buckets, oldest-open aging. Parked, not
+imported: the 8-factor scoring and 256-combo optimizer (data mining our
+promotion bar exists to prevent — available as a pre-registered round 3),
+trailing-stop management (must beat the fixed template in the harness first),
+the regime engine/order server/IVP (overlap or scope conflicts).
+
 ## S4★ PRIME + forward ledger
 
 **PRIME:** when the benchmark regime reads bearish, S4 rows are starred

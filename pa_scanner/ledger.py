@@ -148,6 +148,23 @@ def update_ledger(rows, bundle, market, out_dir="docs"):
     return still_open, resolved
 
 
+def _stats2(entries):
+    """Richer directional stats: win%, avg win/loss, payoff, expectancy/trade."""
+    dirs = [e for e in entries if e["side"] in ("long", "short")]
+    if not dirs:
+        return None
+    rets = [e["ret_pct"] for e in dirs]
+    wins = [r for r in rets if r > 0]
+    losses = [r for r in rets if r <= 0]
+    aw = float(np.mean(wins)) if wins else 0.0
+    al = float(np.mean(losses)) if losses else 0.0
+    return {"n": len(dirs),
+            "win%": round(100 * len(wins) / len(dirs), 1),
+            "avgW": round(aw, 2), "avgL": round(al, 2),
+            "payoff": round(abs(aw / al), 2) if al else None,
+            "exp/trade": round(float(np.mean(rets)), 2)}
+
+
 def _stats(entries):
     dirs = [e for e in entries if e["side"] in ("long", "short")]
     out = {"n": len(dirs)}
@@ -169,14 +186,39 @@ def print_report(market, out_dir="docs"):
     open_e, resolved = _load(out_dir, market)
     print(f"# Forward ledger - {MARKETS[market]['label']}")
     print(f"open {len(open_e)} | resolved {len(resolved)}")
-    if not resolved:
-        return
-    print(f"ALL       : {_stats(resolved)}")
-    for sig in sorted({e['signal'] for e in resolved}):
-        print(f"{sig:<10}: {_stats([e for e in resolved if e['signal'] == sig])}")
-    primes = [e for e in resolved if e.get("prime")]
-    if primes:
-        print(f"S4 PRIME  : {_stats(primes)}")
+    if resolved:
+        print("\n== By rule (directional; win%, avg win/loss, payoff, expectancy/trade) ==")
+        allst = _stats2(resolved)
+        if allst:
+            print(f"ALL       : {allst}")
+        for sig in sorted({e['signal'] for e in resolved}):
+            st = _stats2([e for e in resolved if e['signal'] == sig])
+            if st:
+                print(f"{sig:<10}: {st}")
+        primes = [e for e in resolved if e.get("prime")]
+        pst = _stats2(primes)
+        if pst:
+            print(f"S4 PRIME  : {pst}")
+        neu = [e for e in resolved if e["side"] == "neutral"]
+        if neu:
+            held = sum(1 for e in neu if e["outcome"] == "held")
+            print(f"S3 neutral: n {len(neu)}, held {round(100 * held / len(neu), 1)}%")
+
+        print("\n== Monthly drift (exit month; directional only) ==")
+        months = {}
+        for e in resolved:
+            if e["side"] in ("long", "short") and e.get("exit_date"):
+                months.setdefault(e["exit_date"][:7], []).append(e)
+        for m in sorted(months):
+            print(f"{m}  : {_stats2(months[m])}")
+
+    if open_e:
+        print("\n== Oldest open positions ==")
+        aged = sorted(open_e, key=lambda e: e.get("entry_date", ""))[:10]
+        for e in aged:
+            print(f"  {e['entry_date']}  {e['ticker']:<10} {e['signal']}/{e['side']}"
+                  f"  entry {e['entry_px']}  stop {e.get('stop')}  tgt {e.get('tgt')}"
+                  f"  t{e.get('time_exit')}" + ("  PRIME" if e.get("prime") else ""))
 
 
 def main():

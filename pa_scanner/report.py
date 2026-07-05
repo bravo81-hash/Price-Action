@@ -63,6 +63,7 @@ _HEAD_OPTIONS = """
   <th data-k="age" class="num">Age</th>
   <th data-k="stop" class="num">Stop</th>
   <th data-k="tgt" class="num">Tgt</th>
+  <th data-k="qty" class="num">Qty</th>
   <th data-k="detail">Detail</th>
   <th data-k="volx" class="num">Vol&times;</th>
   <th data-k="atr" class="num">ATR</th>
@@ -92,6 +93,7 @@ _HEAD_DIRECTIONAL = """
   <th data-k="age" class="num">Age</th>
   <th data-k="stop" class="num">Stop</th>
   <th data-k="tgt" class="num">Tgt</th>
+  <th data-k="qty" class="num">Qty</th>
   <th data-k="detail">Detail</th>
   <th>Chart</th>"""
 
@@ -267,6 +269,7 @@ function rowHTML(r){
       `<td class="num">${r.age??""}</td>`+
       `<td class="num">${r.stop??""}</td>`+
       `<td class="num">${r.tgt??""}</td>`+
+      `<td class="num">${r.qty??""}</td>`+
       `<td>${r.detail??""}</td>`+
       `<td>${r.spark_svg}</td>`+tv;
   }
@@ -282,6 +285,7 @@ function rowHTML(r){
     `<td class="num">${r.age??""}</td>`+
     `<td class="num">${r.stop??""}</td>`+
     `<td class="num">${r.tgt??""}</td>`+
+    `<td class="num">${r.qty??""}</td>`+
     `<td>${r.detail??""}</td>`+
     `<td class="num">${r.volx??""}</td>`+
     `<td class="num">${r.atr}</td>`+
@@ -338,8 +342,8 @@ document.querySelectorAll(".bar button[data-f]").forEach(btn=>btn.onclick=()=>{
 $("#q").oninput=e=>{q=e.target.value.trim().toLowerCase(); render();};
 $("#csv").onclick=()=>{
   const cols = MODE==="directional"
-    ? ["ticker","action","action_note","trend","trend_adx","signal","trigger","side","rank","score","prime","last","atr","atr_pct","rs","rs_pct","level","dist","age","stop","tgt","time_exit","detail","label"]
-    : ["ticker","signal","side","rank","score","prime","last","live","live_status","live_dist","level","dist","age","stop","tgt","time_exit","detail","volx","atr","atr_pct","rs","rs_pct","ern",
+    ? ["ticker","action","action_note","trend","trend_adx","signal","trigger","side","rank","score","prime","last","atr","atr_pct","rs","rs_pct","level","dist","age","stop","tgt","time_exit","qty","detail","label"]
+    : ["ticker","signal","side","rank","score","prime","last","live","live_status","live_dist","level","dist","age","stop","tgt","time_exit","qty","detail","volx","atr","atr_pct","rs","rs_pct","ern",
        "regime","regime_adx","align","vol_state","vol_src","cell","structure","ivr","iv","rv","vrp","term","opt_liq","opt_oi","opt_spread","label"];
   const head=cols.join(",");
   const lines=view.map(r=>cols.map(c=>{
@@ -371,6 +375,8 @@ def write_report(rows, path, scanned=0, universe=0, market="us", bench=None):
                 .replace("__ERNWARN__", str(CFG.earnings_warn_days))
                 .replace("__BENCH__",
                          ((f"{bench['symbol']}: {bench['bias'].upper()} (ADX {bench['adx']})"
+                           + (f"  \u00b7 {bench['snap']['state']} \u2014 {bench['snap']['guidance']} [context]"
+                              if bench.get("snap") else "")
                            + ("  \u26a0 STAND-DOWN: bench bearish; trend entries (S1/S2) -0.63% excess (t=-4.0). S4 snapbacks EXEMPT: MR outperforms in bearish regimes (+5.6% US / +4.1% ASX @63d)"
                               if CFG.bench_standdown and bench["bias"] == "bearish" else ""))
                           if bench else ""))

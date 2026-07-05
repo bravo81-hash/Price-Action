@@ -16,6 +16,7 @@ from .scanner import scan, add_regime, add_market_context, compute_rank, add_exi
 from .action import add_action
 from .earnings import annotate_earnings
 from .ledger import update_ledger
+from .snapshot import build_snapshot
 from .report import write_report
 from .webexport import write_web
 
@@ -96,9 +97,16 @@ def main():
 
     # market context: relative strength vs the benchmark + index-regime read
     bench_sym = mkt["bench"]
-    bd = dl.download_daily([bench_sym])
+    aux_syms = [bench_sym] + (["QQQ", "IWM", "^VIX", "HYG"] if a.market == "us" else [])
+    bd = dl.download_daily(aux_syms)
     bench_daily = bd.get(bench_sym)
     binfo = add_market_context(rows, bundle, bench_daily, market=a.market)
+    snap = build_snapshot(bench_daily, qqq=bd.get("QQQ"), iwm=bd.get("IWM"),
+                          vix=bd.get("^VIX"), hyg=bd.get("HYG"))
+    if binfo is not None:
+        binfo["snap"] = {"state": snap["state"], "guidance": snap["guidance"]}
+    print(f"[snapshot] {snap['state']} - {snap['guidance']} "
+          f"({'; '.join(snap['reasons'])})")
 
     floor = CFG.min_score if a.min_score is None else a.min_score
     if floor > 0:

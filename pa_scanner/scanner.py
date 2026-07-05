@@ -375,6 +375,11 @@ def add_exit_levels(rows, market="us"):
             r["time_exit"] = CFG.s4_time_bars
         else:
             r["time_exit"] = CFG.exit_time_bars
+        # position size at the printed stop (STFS-EQ battle-card import)
+        r["qty"] = None
+        if (CFG.risk_dollars > 0 and r["side"] in ("long", "short")
+                and r.get("stop") is not None and abs(last - r["stop"]) > 0):
+            r["qty"] = int(CFG.risk_dollars // abs(last - r["stop"]))
     return rows
 
 

@@ -607,6 +607,66 @@ def main():
         check("ledger: open resolved to target on later scan",
               len(o3) == 0 and len(r3_) == 1 and r3_[0]["outcome"] == "target")
 
+    print("STFS-EQ imports: snapshot / qty / drift report")
+    from .snapshot import build_snapshot
+
+    def snapf(closes, hl=1.0):
+        n = len(closes)
+        c = np.array(closes, float)
+        idx = pd.bdate_range("2025-06-02", periods=n)
+        return pd.DataFrame({"open": c, "high": c + hl, "low": c - hl,
+                             "close": c, "volume": np.full(n, 1e6)}, index=idx)
+
+    check("snapshot: UNKNOWN on short data",
+          build_snapshot(snapf([100] * 10))["state"] == "UNKNOWN")
+    flat = snapf([100] * 80)
+    vixspike = snapf([15] * 79 + [17.0])          # +13% 1d
+    check("snapshot: RISK_OFF on VIX spike",
+          build_snapshot(flat, vix=vixspike)["state"] == "RISK_OFF")
+    dump = snapf([100] * 79 + [98.0])             # -2% close at low
+    dump.iloc[-1, dump.columns.get_loc("high")] = 100.5
+    dump.iloc[-1, dump.columns.get_loc("low")] = 97.8
+    check("snapshot: RISK_OFF on weak bench close",
+          build_snapshot(dump)["state"] == "RISK_OFF")
+    ext = snapf([100.0] * 60 + list(np.linspace(100, 104, 15))
+                + list(np.linspace(104.8, 108.5, 5)))   # 20d +8.5%, 5d +4.3%
+    check("snapshot: RISK_ON_EXTENDED when stretched",
+          build_snapshot(ext)["state"] == "RISK_ON_EXTENDED")
+    cont = snapf([100] * 79 + [100.6])
+    cont.iloc[-1, cont.columns.get_loc("high")] = 100.7
+    cont.iloc[-1, cont.columns.get_loc("low")] = 99.9
+    check("snapshot: RISK_ON_CONTINUATION on strong up close",
+          build_snapshot(cont)["state"] == "RISK_ON_CONTINUATION")
+    pb = snapf([100] * 74 + [99.8, 99.2, 98.6, 98.1, 97.8, 97.7])   # 5d -2.1%, 20d -2.3%
+    pb.iloc[-1, pb.columns.get_loc("high")] = 97.95
+    pb.iloc[-1, pb.columns.get_loc("low")] = 97.45                  # clv 0.5
+    check("snapshot: PULLBACK_BUYABLE on dip w/o risk-off",
+          build_snapshot(pb)["state"] == "PULLBACK_BUYABLE")
+    check("snapshot: CHOP default", build_snapshot(flat)["state"] == "CHOP_NO_EDGE")
+
+    CFG.risk_dollars = 1000.0
+    qr = [{"side": "long", "signal": "S2", "last": 100.0, "atr": 2.0}]
+    add_exit_levels(qr, market="us")
+    check("qty = risk / stop distance", qr[0]["qty"] == 250)   # 1000 / 4.0
+    CFG.risk_dollars = 0.0
+    qr2 = [{"side": "long", "signal": "S2", "last": 100.0, "atr": 2.0}]
+    add_exit_levels(qr2, market="us")
+    check("qty off by default", qr2[0]["qty"] is None)
+
+    from .ledger import print_report as _lpr, _save as _lsave
+    with tempfile.TemporaryDirectory() as tdd:
+        _lsave(tdd, "us",
+               [{"ticker": "A", "signal": "S4", "side": "long", "entry_date": "2026-06-01",
+                 "entry_px": 100.0, "stop": 96.0, "tgt": 103.0, "time_exit": 5}],
+               [{"ticker": "B", "signal": "S4", "side": "long", "entry_date": "2026-05-01",
+                 "entry_px": 100.0, "outcome": "target", "exit_px": 103.0,
+                 "exit_date": "2026-05-05", "bars_held": 3, "ret_pct": 3.0, "prime": True},
+                {"ticker": "C", "signal": "S2", "side": "long", "entry_date": "2026-05-02",
+                 "entry_px": 50.0, "outcome": "stop", "exit_px": 48.0,
+                 "exit_date": "2026-06-03", "bars_held": 6, "ret_pct": -4.0}])
+        _lpr("us", tdd)   # smoke: must not raise
+        check("ledger drift report renders without error", True)
+
     print("candidates (settled)")
     from pa_scanner import candidates as cnds
     from .backtest import candidate_events_for_ticker
