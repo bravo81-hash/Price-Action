@@ -5,5 +5,7 @@ venv/
 env/
 .DS_Store
 pa_report.html
+pa_report_asx.html
+pa_report_in.html
 pa_scan_*.csv
 backtest/

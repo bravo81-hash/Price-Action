@@ -50,54 +50,6 @@ def _enrich(rows):
     return out
 
 
-_HEAD_OPTIONS = """
-  <th data-k="ticker">Ticker</th>
-  <th data-k="signal">Sig</th>
-  <th data-k="side">Side</th>
-  <th data-k="rank" class="num">Rank</th>
-  <th data-k="score" class="num">Score</th>
-  <th data-k="last" class="num">Last</th>
-  <th data-k="live" class="num">Live</th>
-  <th data-k="level" class="num">Level</th>
-  <th data-k="dist" class="num">Dist/Brk(ATR)</th>
-  <th data-k="age" class="num">Age</th>
-  <th data-k="stop" class="num">Stop</th>
-  <th data-k="tgt" class="num">Tgt</th>
-  <th data-k="qty" class="num">Qty</th>
-  <th data-k="detail">Detail</th>
-  <th data-k="volx" class="num">Vol&times;</th>
-  <th data-k="atr" class="num">ATR</th>
-  <th data-k="atr_pct" class="num">ATR%</th>
-  <th data-k="rs_pct" class="num">RS</th>
-  <th data-k="ern" class="num">Ern(d)</th>
-  <th data-k="regime">Regime</th>
-  <th data-k="vol_state">Vol</th>
-  <th data-k="structure">Structure</th>
-  <th data-k="opt_liq">Opt Liq</th>
-  <th>Trend</th>
-  <th>Chart</th>"""
-
-_HEAD_DIRECTIONAL = """
-  <th data-k="ticker">Ticker</th>
-  <th data-k="action">Action</th>
-  <th data-k="trend">Weekly Trend</th>
-  <th data-k="signal">Sig</th>
-  <th data-k="trigger">Trigger</th>
-  <th data-k="rank" class="num">Rank</th>
-  <th data-k="score" class="num">Score</th>
-  <th data-k="last" class="num">Last</th>
-  <th data-k="live" class="num">Live</th>
-  <th data-k="atr_pct" class="num">ATR%</th>
-  <th data-k="rs_pct" class="num">RS</th>
-  <th data-k="level" class="num">Level</th>
-  <th data-k="dist" class="num">Dist/Brk(ATR)</th>
-  <th data-k="age" class="num">Age</th>
-  <th data-k="stop" class="num">Stop</th>
-  <th data-k="tgt" class="num">Tgt</th>
-  <th data-k="qty" class="num">Qty</th>
-  <th data-k="detail">Detail</th>
-  <th>Chart</th>"""
-
 _FILTERS_OPTIONS = """
   <button data-f="all" class="on">All</button>
   <button data-f="S1">S1 reversal</button>
@@ -140,7 +92,7 @@ _TEMPLATE = """<!doctype html>
  h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.3px}
  .meta{color:var(--mut);font-size:12px}
  .bar{padding:12px 20px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;
-   border-bottom:1px solid var(--bd)}
+   border-bottom:1px solid var(--bd);position:relative}
  .bar input{background:var(--panel);border:1px solid var(--bd);color:var(--fg);
    padding:6px 10px;border-radius:6px;font:inherit;min-width:200px}
  button{background:var(--panel);border:1px solid var(--bd);color:var(--fg);
@@ -148,12 +100,25 @@ _TEMPLATE = """<!doctype html>
  button:hover{border-color:var(--accent)}
  button.on{background:var(--accent);color:#0d1117;border-color:var(--accent)}
  .spacer{flex:1}
- table{width:100%;border-collapse:collapse}
+ #twrap{overflow-x:auto}
+ table{border-collapse:collapse;table-layout:fixed}
  th,td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--bd);
-   white-space:nowrap}
+   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
  th{position:sticky;top:0;background:var(--panel);cursor:pointer;
-   color:var(--mut);font-weight:600;user-select:none}
+   color:var(--mut);font-weight:600;user-select:none;z-index:5}
  th:hover{color:var(--fg)}
+ th .thlabel{overflow:hidden;text-overflow:ellipsis;display:block;pointer-events:none}
+ th.dragging{opacity:.4}
+ th.dragover{box-shadow:inset 2px 0 0 var(--accent)}
+ .colresizer{position:absolute;right:0;top:0;bottom:0;width:6px;cursor:col-resize}
+ .colresizer:hover,.colresizer:active{background:var(--accent)}
+ #colsPanel{display:none;position:absolute;top:100%;right:20px;background:var(--panel);
+   border:1px solid var(--bd);border-radius:8px;padding:8px 10px;max-height:360px;
+   overflow-y:auto;z-index:50;min-width:190px;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+ #colsPanel.open{display:block}
+ #colsPanel .colsRow{display:flex;align-items:center;gap:6px;padding:4px 2px;
+   color:var(--fg);cursor:pointer;white-space:nowrap}
+ #colsPanel .colsReset{width:100%;margin-bottom:6px}
  td.num{text-align:right;font-variant-numeric:tabular-nums}
  tr:hover td{background:#1c2230}
  .tag{padding:1px 7px;border-radius:4px;font-size:11px;font-weight:600}
@@ -177,9 +142,11 @@ _TEMPLATE = """<!doctype html>
 <div class="bar">
   <input id="q" placeholder="filter ticker...">__FILTERS__
   <span class="spacer"></span>
+  <button id="colsBtn">&#9881; Columns</button>
   <button id="csv">Export CSV</button>
+  <div id="colsPanel"></div>
 </div>
-<table id="t"><thead><tr>__HEAD__</tr></thead><tbody id="b"></tbody></table>
+<div id="twrap"><table id="t"><thead><tr id="head"></tr></thead><tbody id="b"></tbody></table></div>
 <div id="empty" class="empty" style="display:none">No signals matched.</div>
 <script>
 const ROWS = __ROWS__;
@@ -250,55 +217,227 @@ function trendCell(r){
   const T={up:'#3fb950',flat:'#8b949e',down:'#f85149'};
   return `<span style="color:${T[r.trend]||'#c9d1d9'}">${(r.trend||'').toUpperCase()}</span> <span class="src">ADX ${r.trend_adx??''}</span>`;
 }
+function sigTag(r){ return `<span class="tag ${r.prime?"prime":String(r.signal).toLowerCase()}">${r.signal}${r.prime?"\u2605":""}</span>`; }
+function chartCell(r){ return `<a href="https://www.tradingview.com/chart/?symbol=${encodeURIComponent(tvSym(r.ticker))}" target="_blank">TV</a>`; }
 
-function rowHTML(r){
-  const head=`<td><b>${dispSym(r.ticker)}</b></td>`;
-  const tv=`<td><a href="https://www.tradingview.com/chart/?symbol=${encodeURIComponent(tvSym(r.ticker))}" target="_blank">TV</a></td>`;
-  if(MODE==="directional"){
-    return head+
-      `<td>${actionCell(r)}</td>`+
-      `<td>${trendCell(r)}</td>`+
-      `<td><span class="tag ${r.prime?"prime":r.signal.toLowerCase()}">${r.signal}${r.prime?"\u2605":""}</span></td>`+
-      `<td class="${r.trigger}">${r.trigger||''}</td>`+
-      `<td class="num">${r.rank??""}</td>`+
-      `<td class="num score">${r.score.toFixed(3)}</td>`+
-      `<td class="num">${r.last}</td>`+
-      `<td class="num">${liveCell(r)}</td>`+
-      `<td class="num">${r.atr_pct??""}</td>`+
-      `<td class="num">${rsCell(r)}</td>`+
-      `<td class="num">${r.level??""}</td>`+
-      `<td class="num">${r.dist??""}</td>`+
-      `<td class="num">${r.age??""}</td>`+
-      `<td class="num">${r.stop??""}</td>`+
-      `<td class="num">${r.tgt??""}</td>`+
-      `<td class="num">${r.qty??""}</td>`+
-      `<td>${r.detail??""}</td>`+
-      `<td>${r.spark_svg}</td>`+tv;
+/* ---------- column model (reorder / hide / resize) ---------- */
+const TICKER_COL = {id:"ticker",key:"ticker",label:"Ticker",w:90};
+const COLUMNS = {
+  options:[
+    {id:"signal",key:"signal",label:"Sig",w:70,render:sigTag},
+    {id:"side",key:"side",label:"Side",w:64,rowCls:r=>r.side,render:r=>r.side},
+    {id:"rank",key:"rank",label:"Rank",cls:"num",w:56,render:r=>r.rank??""},
+    {id:"score",key:"score",label:"Score",cls:"num score",w:70,render:r=>Number(r.score).toFixed(3)},
+    {id:"last",key:"last",label:"Last",cls:"num",w:70,render:r=>r.last??""},
+    {id:"live",key:"live",label:"Live",cls:"num",w:140,render:r=>liveCell(r)},
+    {id:"level",key:"level",label:"Level",cls:"num",w:74,render:r=>r.level??""},
+    {id:"dist",key:"dist",label:"Dist/Brk(ATR)",cls:"num",w:110,render:r=>r.dist??""},
+    {id:"age",key:"age",label:"Age",cls:"num",w:50,render:r=>r.age??""},
+    {id:"stop",key:"stop",label:"Stop",cls:"num",w:70,render:r=>r.stop??""},
+    {id:"tgt",key:"tgt",label:"Tgt",cls:"num",w:70,render:r=>r.tgt??""},
+    {id:"qty",key:"qty",label:"Qty",cls:"num",w:60,render:r=>r.qty??""},
+    {id:"detail",key:"detail",label:"Detail",w:200,render:r=>r.detail??""},
+    {id:"volx",key:"volx",label:"Vol\u00d7",cls:"num",w:60,render:r=>r.volx??""},
+    {id:"atr",key:"atr",label:"ATR",cls:"num",w:60,render:r=>r.atr??""},
+    {id:"atr_pct",key:"atr_pct",label:"ATR%",cls:"num",w:64,render:r=>r.atr_pct??""},
+    {id:"rs",key:"rs_pct",label:"RS",cls:"num",w:56,render:r=>rsCell(r)},
+    {id:"ern",key:"ern",label:"Ern(d)",cls:"num",w:60,render:r=>ernCell(r)},
+    {id:"regime",key:"regime",label:"Regime",w:110,render:r=>regCell(r)},
+    {id:"vol",key:"vol_state",label:"Vol",w:140,title:volTitle,render:r=>volCell(r)},
+    {id:"structure",key:"structure",label:"Structure",w:120,render:r=>structCell(r)},
+    {id:"opt_liq",key:"opt_liq",label:"Opt Liq",w:130,render:r=>optLiqCell(r)},
+    {id:"spark",key:"",label:"Trend",w:110,render:r=>r.spark_svg},
+    {id:"chart",key:"",label:"Chart",w:56,render:chartCell},
+  ],
+  directional:[
+    {id:"action",key:"action",label:"Action",w:110,render:r=>actionCell(r)},
+    {id:"trend",key:"trend",label:"Weekly Trend",w:110,render:r=>trendCell(r)},
+    {id:"signal",key:"signal",label:"Sig",w:70,render:sigTag},
+    {id:"trigger",key:"trigger",label:"Trigger",w:90,rowCls:r=>r.trigger,render:r=>r.trigger||""},
+    {id:"rank",key:"rank",label:"Rank",cls:"num",w:56,render:r=>r.rank??""},
+    {id:"score",key:"score",label:"Score",cls:"num score",w:70,render:r=>Number(r.score).toFixed(3)},
+    {id:"last",key:"last",label:"Last",cls:"num",w:70,render:r=>r.last??""},
+    {id:"live",key:"live",label:"Live",cls:"num",w:140,render:r=>liveCell(r)},
+    {id:"atr_pct",key:"atr_pct",label:"ATR%",cls:"num",w:64,render:r=>r.atr_pct??""},
+    {id:"rs",key:"rs_pct",label:"RS",cls:"num",w:56,render:r=>rsCell(r)},
+    {id:"level",key:"level",label:"Level",cls:"num",w:74,render:r=>r.level??""},
+    {id:"dist",key:"dist",label:"Dist/Brk(ATR)",cls:"num",w:110,render:r=>r.dist??""},
+    {id:"age",key:"age",label:"Age",cls:"num",w:50,render:r=>r.age??""},
+    {id:"stop",key:"stop",label:"Stop",cls:"num",w:70,render:r=>r.stop??""},
+    {id:"tgt",key:"tgt",label:"Tgt",cls:"num",w:70,render:r=>r.tgt??""},
+    {id:"qty",key:"qty",label:"Qty",cls:"num",w:60,render:r=>r.qty??""},
+    {id:"detail",key:"detail",label:"Detail",w:200,render:r=>r.detail??""},
+    {id:"spark",key:"",label:"Trend",w:110,render:r=>r.spark_svg},
+    {id:"chart",key:"",label:"Chart",w:56,render:chartCell},
+  ]
+};
+function lsGet(k){ try{return localStorage.getItem(k);}catch(e){return null;} }
+function lsSet(k,v){ try{localStorage.setItem(k,v);}catch(e){} }
+function lsDel(k){ try{localStorage.removeItem(k);}catch(e){} }
+function colStateKey(mode){ return "pa_cols_"+mode; }
+function loadColState(mode){
+  const ids = COLUMNS[mode].map(c=>c.id);
+  let st=null;
+  try{ st = JSON.parse(lsGet(colStateKey(mode))); }catch(e){}
+  if(!st || !Array.isArray(st.order)) st={order:ids.slice(), hidden:[], widths:{}};
+  st.order = st.order.filter(id=>ids.includes(id));
+  ids.forEach(id=>{ if(!st.order.includes(id)) st.order.push(id); });
+  st.hidden = (st.hidden||[]).filter(id=>ids.includes(id));
+  st.widths = st.widths||{};
+  return st;
+}
+const colStateCache = {};
+function getColState(mode){
+  if(!colStateCache[mode]) colStateCache[mode] = loadColState(mode);
+  return colStateCache[mode];
+}
+function saveColState(mode){ lsSet(colStateKey(mode), JSON.stringify(colStateCache[mode])); }
+function colWidth(mode, id){
+  const st=getColState(mode);
+  if(st.widths[id]) return st.widths[id];
+  const col = id==="ticker" ? TICKER_COL : COLUMNS[mode].find(c=>c.id===id);
+  return col ? col.w : 80;
+}
+let resizeState=null;
+function startResize(e, id){
+  e.preventDefault(); e.stopPropagation();
+  const col = document.querySelector(`#t colgroup col[data-col-id="${id}"]`);
+  if(!col) return;
+  resizeState = { id, startX:e.clientX, startW: col.offsetWidth || colWidth(MODE,id), col };
+  document.addEventListener("mousemove", onResizeMove);
+  document.addEventListener("mouseup", onResizeUp);
+}
+function onResizeMove(e){
+  if(!resizeState) return;
+  const w = Math.max(32, resizeState.startW + (e.clientX - resizeState.startX));
+  resizeState.col.style.width = w+"px";
+  const table=$("#t");
+  const total=[...table.querySelectorAll("colgroup col")].reduce((s,c)=>s+c.offsetWidth,0);
+  table.style.width = total+"px";
+}
+function onResizeUp(){
+  if(!resizeState) return;
+  const w = parseInt(resizeState.col.style.width,10);
+  getColState(MODE).widths[resizeState.id] = w;
+  saveColState(MODE);
+  resizeState=null;
+  document.removeEventListener("mousemove", onResizeMove);
+  document.removeEventListener("mouseup", onResizeUp);
+}
+function buildChrome(){
+  const st = getColState(MODE);
+  const cols = COLUMNS[MODE];
+  const visible = st.order.filter(id=>!st.hidden.includes(id));
+  const table = $("#t");
+  const oldCg = table.querySelector("colgroup");
+  if(oldCg) oldCg.remove();
+  const cg = document.createElement("colgroup");
+  const tCol = document.createElement("col");
+  tCol.dataset.colId="ticker"; tCol.style.width=colWidth(MODE,"ticker")+"px";
+  cg.appendChild(tCol);
+  visible.forEach(id=>{
+    const c=document.createElement("col");
+    c.dataset.colId=id; c.style.width=colWidth(MODE,id)+"px";
+    cg.appendChild(c);
+  });
+  table.insertBefore(cg, table.firstChild);
+  const total=[...cg.querySelectorAll("col")].reduce((s,c)=>s+parseInt(c.style.width,10),0);
+  table.style.width = total+"px";
+
+  function makeTh(id,label,key,cls){
+    const th=document.createElement("th");
+    th.dataset.id=id;
+    if(key) th.dataset.k=key; if(cls) th.className=cls;
+    const span=document.createElement("span");
+    span.className="thlabel"; span.textContent=label;
+    th.appendChild(span);
+    const rez=document.createElement("div");
+    rez.className="colresizer"; rez.draggable=false;
+    rez.onmousedown=e=>startResize(e,id);
+    rez.ondragstart=e=>e.preventDefault();
+    th.appendChild(rez);
+    return th;
   }
-  return head+
-    `<td><span class="tag ${r.prime?"prime":r.signal.toLowerCase()}">${r.signal}${r.prime?"\u2605":""}</span></td>`+
-    `<td class="${r.side}">${r.side}</td>`+
-    `<td class="num">${r.rank??""}</td>`+
-    `<td class="num score">${r.score.toFixed(3)}</td>`+
-    `<td class="num">${r.last}</td>`+
-    `<td class="num">${liveCell(r)}</td>`+
-    `<td class="num">${r.level??""}</td>`+
-    `<td class="num">${r.dist??""}</td>`+
-    `<td class="num">${r.age??""}</td>`+
-    `<td class="num">${r.stop??""}</td>`+
-    `<td class="num">${r.tgt??""}</td>`+
-    `<td class="num">${r.qty??""}</td>`+
-    `<td>${r.detail??""}</td>`+
-    `<td class="num">${r.volx??""}</td>`+
-    `<td class="num">${r.atr}</td>`+
-    `<td class="num">${r.atr_pct??""}</td>`+
-    `<td class="num">${rsCell(r)}</td>`+
-    `<td class="num">${ernCell(r)}</td>`+
-    `<td>${regCell(r)}</td>`+
-    `<td title="${volTitle(r)}">${volCell(r)}</td>`+
-    `<td>${structCell(r)}</td>`+
-    `<td>${optLiqCell(r)}</td>`+
-    `<td>${r.spark_svg}</td>`+tv;
+  const hr=$("#head"); hr.innerHTML="";
+  hr.appendChild(makeTh("ticker","Ticker","ticker",null));
+  visible.forEach(id=>{
+    const c = cols.find(x=>x.id===id);
+    if(!c) return;
+    const th = makeTh(id, c.label, c.key, c.cls ? c.cls.split(" ")[0] : null);
+    th.draggable = true;
+    th.ondragstart = e=>{ e.dataTransfer.setData("text/plain", id); th.classList.add("dragging"); };
+    th.ondragend = ()=>{ th.classList.remove("dragging"); hr.querySelectorAll("th").forEach(x=>x.classList.remove("dragover")); };
+    th.ondragover = e=>{ e.preventDefault(); th.classList.add("dragover"); };
+    th.ondragleave = ()=> th.classList.remove("dragover");
+    th.ondrop = e=>{
+      e.preventDefault(); th.classList.remove("dragover");
+      const srcId = e.dataTransfer.getData("text/plain");
+      if(!srcId || srcId===id) return;
+      const order = st.order;
+      const from = order.indexOf(srcId);
+      if(from<0) return;
+      order.splice(from,1);
+      const to = order.indexOf(id);
+      if(to<0){ order.splice(from,0,srcId); return; }
+      const rect = th.getBoundingClientRect();
+      const after = (e.clientX - rect.left) > rect.width/2;
+      order.splice(after? to+1 : to, 0, srcId);
+      saveColState(MODE);
+      buildChrome(); render();
+    };
+    hr.appendChild(th);
+  });
+  hr.querySelectorAll("th[data-k]").forEach(th=>{
+    th.onclick=e=>{
+      if(e.target.classList.contains("colresizer")) return;
+      const k=th.dataset.k;
+      if(sortK===k) sortDir*=-1;
+      else {sortK=k; sortDir=(k==="ticker"||k==="detail"||k==="side"||k==="action"||k==="trend"||k==="trigger")?1:-1;}
+      render();
+    };
+  });
+  buildColsPanel();
+}
+function buildColsPanel(){
+  const panel = $("#colsPanel");
+  const st = getColState(MODE);
+  const cols = COLUMNS[MODE];
+  panel.innerHTML = "";
+  const resetBtn=document.createElement("button");
+  resetBtn.textContent="Reset columns"; resetBtn.className="colsReset";
+  resetBtn.onclick=()=>{ lsDel(colStateKey(MODE)); colStateCache[MODE]=null; buildChrome(); render(); };
+  panel.appendChild(resetBtn);
+  st.order.forEach(id=>{
+    const c = cols.find(x=>x.id===id);
+    if(!c) return;
+    const row=document.createElement("label");
+    row.className="colsRow";
+    const cb=document.createElement("input");
+    cb.type="checkbox"; cb.checked = !st.hidden.includes(id);
+    cb.onchange=()=>{
+      if(cb.checked) st.hidden = st.hidden.filter(x=>x!==id);
+      else if(!st.hidden.includes(id)) st.hidden.push(id);
+      saveColState(MODE);
+      buildChrome(); render();
+    };
+    row.appendChild(cb);
+    row.appendChild(document.createTextNode(" "+c.label));
+    panel.appendChild(row);
+  });
+}
+function rowHTML(r){
+  const st = getColState(MODE);
+  const cols = COLUMNS[MODE];
+  const visible = st.order.filter(id=>!st.hidden.includes(id));
+  let out = `<td><b>${dispSym(r.ticker)}</b></td>`;
+  visible.forEach(id=>{
+    const c = cols.find(x=>x.id===id);
+    if(!c) return;
+    const cls=[c.cls, c.rowCls?c.rowCls(r):""].filter(Boolean).join(" ");
+    const t = c.title ? ` title="${c.title(r)}"` : "";
+    out += `<td${cls?` class="${cls}"`:""}${t}>${c.render(r)}</td>`;
+  });
+  return out;
 }
 
 function passes(r){
@@ -331,17 +470,17 @@ function render(){
   }
   $("#empty").style.display = view.length? "none":"block";
 }
-document.querySelectorAll("th[data-k]").forEach(th=>th.onclick=()=>{
-  const k=th.dataset.k;
-  if(sortK===k) sortDir*=-1; else {sortK=k; sortDir=(k==="ticker"||k==="detail"||k==="side"||k==="action"||k==="trend"||k==="trigger")?1:-1;}
-  render();
-});
 document.querySelectorAll(".bar button[data-f]").forEach(btn=>btn.onclick=()=>{
   filt=btn.dataset.f;
   document.querySelectorAll(".bar button[data-f]").forEach(b=>b.classList.remove("on"));
   btn.classList.add("on"); render();
 });
 $("#q").oninput=e=>{q=e.target.value.trim().toLowerCase(); render();};
+$("#colsBtn").onclick=e=>{ e.stopPropagation(); $("#colsPanel").classList.toggle("open"); };
+document.addEventListener("click", e=>{
+  const p=$("#colsPanel");
+  if(p.classList.contains("open") && !p.contains(e.target) && e.target.id!=="colsBtn") p.classList.remove("open");
+});
 $("#csv").onclick=()=>{
   const cols = MODE==="directional"
     ? ["ticker","action","action_note","trend","trend_adx","signal","trigger","side","rank","score","prime","last","live","live_status","live_dist","atr","atr_pct","rs","rs_pct","level","dist","age","stop","tgt","time_exit","qty","detail","label"]
@@ -357,6 +496,7 @@ $("#csv").onclick=()=>{
   a.href=URL.createObjectURL(blob);
   a.download="pa_scan___MKT___"+"__DATESTAMP__"+".csv"; a.click();
 };
+buildChrome();
 render();
 </script></body></html>"""
 
@@ -367,11 +507,9 @@ def write_report(rows, path, scanned=0, universe=0, market="us", bench=None):
     enriched = _enrich(rows)
     now = dt.datetime.now()
     title = f"PRICE-ACTION SCAN \u2014 {mkt['label']}"
-    head = _HEAD_DIRECTIONAL if directional else _HEAD_OPTIONS
     filters = _FILTERS_DIRECTIONAL if directional else _FILTERS_OPTIONS
     html_out = (_TEMPLATE
                 .replace("__ROWS__", json.dumps(enriched))
-                .replace("__HEAD__", head)
                 .replace("__FILTERS__", filters)
                 .replace("__MODE__", mkt["mode"])
                 .replace("__ERNWARN__", str(CFG.earnings_warn_days))
