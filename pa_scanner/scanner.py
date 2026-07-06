@@ -414,6 +414,9 @@ def live_status(row, live_price, atr):
         past = live_price > lvl if side == "long" else live_price < lvl
         d = abs(live_price - lvl) / atr if atr else None
         return ("triggered" if past else "pending"), (round(d, 2) if d is not None else None)
+    if sig == "S4" and lvl:      # lvl = 200SMA; snapback wants price back above it
+        d = (live_price - lvl) / atr if atr else None
+        return ("reclaimed" if live_price > lvl else "below MA"), (round(d, 2) if d is not None else None)
     if sig == "S1" and lvl:
         d = abs(live_price - lvl) / atr if atr else None
         return ("at level" if (d is not None and d <= 1) else "away"), (round(d, 2) if d is not None else None)
@@ -423,6 +426,43 @@ def live_status(row, live_price, atr):
             pos = (live_price - lo) / (hi - lo)
             return ("in range" if 0 <= pos <= 1 else "broke out"), round(pos, 2)
     return ("", None)
+
+
+def add_live_directional(rows):
+    """Real-time last-hour refresh for directional markets (ASX): TWS price
+    snapshots + live trigger status, no vol/options work. Falls back silently
+    if TWS is unavailable (live columns stay blank)."""
+    from .volproviders import TWSVolProvider
+    try:
+        prov = TWSVolProvider(vix_backwardation=None)
+    except Exception as e:
+        print(f"[live] TWS unavailable ({e}); skipping real-time refresh")
+        return rows
+    n = 0
+    try:
+        if not hasattr(prov, "snapshot"):
+            return rows
+        cache = {}
+        for r in rows:
+            t = r["ticker"]
+            if t not in cache:
+                try:
+                    cache[t] = prov.snapshot(t)
+                except Exception:
+                    cache[t] = None
+            snap = cache[t]
+            if snap and snap.get("last"):
+                lp = snap["last"]
+                r["live"] = round(lp, 2)
+                status, metric = live_status(r, lp, r.get("atr") or 0.0)
+                r["live_status"] = status
+                r["live_dist"] = metric
+                n += 1
+    finally:
+        if hasattr(prov, "close"):
+            prov.close()
+    print(f"[live] real-time prices on {n}/{len(rows)} signals")
+    return rows
 
 
 def add_regime(rows, bundle, iv_enrich=None, vix_backwardation=None, live=False):

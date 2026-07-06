@@ -133,7 +133,12 @@ guarantees liquidity. yfinance handles `.AX` / `.NS` natively.
 **Dashboard:** the US / ASX / India tabs at the top switch markets; each has its
 own JSON snapshot (`latest.json`, `latest_asx.json`, `latest_in.json`) and the
 cloud Action refreshes all three daily. Local buttons:
-`run_scan_asx.bat` / `run_scan_india.bat` (and `.command`).
+`run_scan_all.bat` (US + ASX daily, via TWS — the recommended default),
+`run_scan_live.bat` (US + ASX last-hour real-time, local-only), and the
+single-market `run_scan.bat` / `run_scan_asx.bat` / `run_scan_india.bat`
+(and `.command` equivalents). ASX runs on IBKR/TWS so it shares the US live
+last-hour path (S2 triggered/pending, S4 reclaimed/below-MA, S1 at-level);
+India is EOD-only (separate broker).
 
 ## Validated edges (5y event study, side-matched baselines)
 

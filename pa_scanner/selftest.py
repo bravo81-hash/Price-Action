@@ -607,6 +607,25 @@ def main():
         check("ledger: open resolved to target on later scan",
               len(o3) == 0 and len(r3_) == 1 and r3_[0]["outcome"] == "target")
 
+    print("ASX live wiring")
+    from .scanner import live_status as _ls
+    check("S4 live: reclaimed above MA",
+          _ls({"signal": "S4", "side": "long", "level": 100.0}, 102.0, 2.0)[0] == "reclaimed")
+    check("S4 live: below MA",
+          _ls({"signal": "S4", "side": "long", "level": 100.0}, 99.0, 2.0)[0] == "below MA")
+    check("S2 long live still triggers",
+          _ls({"signal": "S2", "side": "long", "level": 100.0}, 101.0, 2.0)[0] == "triggered")
+    from .report import write_report as _wr
+    drow = [{"ticker": "CBA.AX", "signal": "S4", "side": "long", "score": 0.6,
+             "last": 101.0, "atr": 2.0, "trend": "up", "trigger": "bullish",
+             "action": "BUY", "action_tier": "pos", "rank": 100,
+             "live": 101.5, "live_status": "reclaimed", "live_dist": 0.75}]
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        h = open(_wr(drow, td + "/r.html", 1, 1, market="asx")).read()
+        check("directional report has Live column + value",
+              ">Live<" in h and "reclaimed" in h and "101.5" in h)
+
     print("STFS-EQ imports: snapshot / qty / drift report")
     from .snapshot import build_snapshot
 

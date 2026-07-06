@@ -294,10 +294,13 @@ open positions.</p>
 
 <h2>Running a scan</h2>
 <p>Scans run locally (Python + TWS/yfinance) and push a JSON snapshot the dashboard reads.
-One-click runners: <code>run_scan.bat</code> (US), <code>run_scan_live.bat</code> (US, last-hour
-real-time, local-only), <code>run_scan_asx.bat</code>, <code>run_scan_india.bat</code>. The
-cloud Action refreshes all three markets daily. <code>run_backtest.bat</code> regenerates the
-event-study reports behind the Backtest tab.</p>
+One-click runners: <b><code>run_scan_all.bat</code></b> (US + ASX daily, via TWS — the default),
+<b><code>run_scan_live.bat</code></b> (US + ASX last-hour real-time, local-only), plus the
+single-market <code>run_scan.bat</code> (US), <code>run_scan_asx.bat</code>,
+<code>run_scan_india.bat</code>. ASX trades via IBKR/TWS so it gets the same live last-hour
+refresh as US (S2 triggered/pending, S4 reclaimed/below-MA, S1 at-level); India is EOD-only
+(separate broker, no TWS). The cloud Action refreshes all three markets daily.
+<code>run_backtest.bat</code> regenerates the event-study reports.</p>
 </div>
 
 <script>
@@ -315,7 +318,7 @@ const HEAD = {
     ["regime","Regime"],["vol_state","Vol"],
     ["structure","Structure"],["opt_liq","Opt Liq"],["","Trend"],["","Chart"]],
   directional:[["ticker","Ticker"],["action","Action"],["trend","Weekly Trend"],["signal","Sig"],
-    ["trigger","Trigger"],["rank","Rank","num"],["score","Score","num"],["last","Last","num"],["atr_pct","ATR%","num"],
+    ["trigger","Trigger"],["rank","Rank","num"],["score","Score","num"],["last","Last","num"],["live","Live","num"],["atr_pct","ATR%","num"],
     ["rs_pct","RS","num"],["level","Level","num"],
     ["dist","Dist/Brk(ATR)","num"],["age","Age","num"],["stop","Stop","num"],["tgt","Tgt","num"],["qty","Qty","num"],["detail","Detail"],["","Chart"]]
 };
@@ -377,6 +380,14 @@ function volTitle(r){
   return f.join(" · ") || "no IV data";
 }
 function volCell(r){ if(!r.vol_state) return ""; return `${r.vol_state} <span class="src">${r.vol_src||''}</span>`; }
+function liveCell(r){
+  if(r.live==null) return "";
+  const S={'triggered':'#3fb950','pending':'#d29922','at level':'#58a6ff','in range':'#8b949e','broke out':'#d29922','away':'#8b949e','reclaimed':'#3fb950','below MA':'#d29922'};
+  const c=S[r.live_status]||'#c9d1d9';
+  const st=r.live_status?` <span class="src" style="color:${c}">${r.live_status}</span>`:'';
+  const d=(r.live_dist!=null)?` <span class="src">Δ ${r.live_dist}</span>`:'';
+  return `${r.live}${st}${d}`;
+}
 function structCell(r){
   if(!r.structure) return "";
   const m=String(r.structure).match(/\((\w)\)$/), dc=m?m[1]:'';
@@ -421,6 +432,7 @@ function rowHTML(r){
       `<td class="num">${r.rank??""}</td>`+
       `<td class="num score">${Number(r.score).toFixed(3)}</td>`+
       `<td class="num">${r.last??""}</td>`+
+      `<td class="num">${liveCell(r)}</td>`+
       `<td class="num">${r.atr_pct??""}</td>`+
       `<td class="num">${rsCell(r)}</td>`+
       `<td class="num">${r.level??""}</td>`+
@@ -555,7 +567,7 @@ $("#q").oninput=e=>{q=e.target.value.trim().toLowerCase(); render();};
 $("#reload").onclick=()=>{ const s=$("#snap"); load(s.value||"latest"); };
 $("#csv").onclick=()=>{
   const cols = MODE==="directional"
-    ? ["ticker","action","action_note","trend","trend_adx","signal","trigger","side","rank","score","prime","last","atr","atr_pct","rs","rs_pct","level","dist","age","stop","tgt","time_exit","qty","detail","label"]
+    ? ["ticker","action","action_note","trend","trend_adx","signal","trigger","side","rank","score","prime","last","live","live_status","live_dist","atr","atr_pct","rs","rs_pct","level","dist","age","stop","tgt","time_exit","qty","detail","label"]
     : ["ticker","signal","side","rank","score","prime","last","level","dist","age","stop","tgt","time_exit","qty","detail","volx","atr","atr_pct","rs","rs_pct","ern",
        "regime","regime_adx","align","vol_state","vol_src","cell","structure","ivr","iv","rv","vrp","term","opt_liq","opt_oi","opt_spread","label"];
   const head=cols.join(",");

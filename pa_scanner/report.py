@@ -86,6 +86,7 @@ _HEAD_DIRECTIONAL = """
   <th data-k="rank" class="num">Rank</th>
   <th data-k="score" class="num">Score</th>
   <th data-k="last" class="num">Last</th>
+  <th data-k="live" class="num">Live</th>
   <th data-k="atr_pct" class="num">ATR%</th>
   <th data-k="rs_pct" class="num">RS</th>
   <th data-k="level" class="num">Level</th>
@@ -209,7 +210,7 @@ function volTitle(r){
 function volCell(r){ if(!r.vol_state) return ""; return `${r.vol_state} <span class="src">${r.vol_src||''}</span>`; }
 function liveCell(r){
   if(r.live==null) return "";
-  const S={'triggered':'#3fb950','pending':'#d29922','at level':'#58a6ff','in range':'#8b949e','broke out':'#d29922','away':'#8b949e'};
+  const S={'triggered':'#3fb950','pending':'#d29922','at level':'#58a6ff','in range':'#8b949e','broke out':'#d29922','away':'#8b949e','reclaimed':'#3fb950','below MA':'#d29922'};
   const c=S[r.live_status]||'#c9d1d9';
   const st=r.live_status?` <span class="src" style="color:${c}">${r.live_status}</span>`:'';
   const lbl=(r.live_status==='in range'||r.live_status==='broke out')?'pos':'\\u0394';
@@ -262,6 +263,7 @@ function rowHTML(r){
       `<td class="num">${r.rank??""}</td>`+
       `<td class="num score">${r.score.toFixed(3)}</td>`+
       `<td class="num">${r.last}</td>`+
+      `<td class="num">${liveCell(r)}</td>`+
       `<td class="num">${r.atr_pct??""}</td>`+
       `<td class="num">${rsCell(r)}</td>`+
       `<td class="num">${r.level??""}</td>`+
@@ -342,7 +344,7 @@ document.querySelectorAll(".bar button[data-f]").forEach(btn=>btn.onclick=()=>{
 $("#q").oninput=e=>{q=e.target.value.trim().toLowerCase(); render();};
 $("#csv").onclick=()=>{
   const cols = MODE==="directional"
-    ? ["ticker","action","action_note","trend","trend_adx","signal","trigger","side","rank","score","prime","last","atr","atr_pct","rs","rs_pct","level","dist","age","stop","tgt","time_exit","qty","detail","label"]
+    ? ["ticker","action","action_note","trend","trend_adx","signal","trigger","side","rank","score","prime","last","live","live_status","live_dist","atr","atr_pct","rs","rs_pct","level","dist","age","stop","tgt","time_exit","qty","detail","label"]
     : ["ticker","signal","side","rank","score","prime","last","live","live_status","live_dist","level","dist","age","stop","tgt","time_exit","qty","detail","volx","atr","atr_pct","rs","rs_pct","ern",
        "regime","regime_adx","align","vol_state","vol_src","cell","structure","ivr","iv","rv","vrp","term","opt_liq","opt_oi","opt_spread","label"];
   const head=cols.join(",");

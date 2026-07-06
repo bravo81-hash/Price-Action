@@ -12,7 +12,7 @@ import argparse
 from .config import CFG, MARKETS
 from . import universe as uni
 from . import data as dl
-from .scanner import scan, add_regime, add_market_context, compute_rank, add_exit_levels, mark_prime
+from .scanner import scan, add_regime, add_market_context, compute_rank, add_exit_levels, mark_prime, add_live_directional
 from .action import add_action
 from .earnings import annotate_earnings
 from .ledger import update_ledger
@@ -71,12 +71,17 @@ def main():
         CFG.allow_long = False
     if a.no_neutral:
         CFG.allow_neutral = False
+    live_directional = a.live and a.market == "asx"   # ASX trades via IBKR/TWS
     if a.tws and not directional:
         CFG.vol_source = "tws"
-    if a.live and not directional:      # real-time last-hour mode (US/options only)
+    if a.live and not directional:      # real-time last-hour mode (US/options)
         CFG.vol_source = "tws"
         CFG.tws_market_data_type = 1    # live ticks for prices + greeks
+    if live_directional:                # ASX directional live
+        CFG.tws_market_data_type = 1
     live = a.live and not directional
+    if a.live and a.market == "in":
+        print("[live] India trades via a separate broker (no TWS); --live ignored")
 
     syms = a.tickers or uni.universe_for(a.market)
     if a.limit:
@@ -118,6 +123,9 @@ def main():
     if directional:
         print(f"[scan] {len(rows)} signals; assigning long-only actions...")
         add_action(rows, bundle)
+        if live_directional:
+            print(f"[scan] {len(rows)} signals; real-time TWS refresh...")
+            add_live_directional(rows)
     else:
         print(f"[scan] {len(rows)} signals; classifying regime"
               + (" + IV enrichment" if (CFG.iv_enrich_hits and not a.no_iv) else "") + "...")
