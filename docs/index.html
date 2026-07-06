@@ -295,11 +295,12 @@ open positions.</p>
 <h2>Running a scan</h2>
 <p>Scans run locally (Python + TWS/yfinance) and push a JSON snapshot the dashboard reads.
 One-click runners: <b><code>run_scan_all.bat</code></b> (US + ASX daily, via TWS — the default),
-<b><code>run_scan_live.bat</code></b> (US + ASX last-hour real-time, local-only), plus the
-single-market <code>run_scan.bat</code> (US), <code>run_scan_asx.bat</code>,
-<code>run_scan_india.bat</code>. ASX trades via IBKR/TWS so it gets the same live last-hour
-refresh as US (S2 triggered/pending, S4 reclaimed/below-MA, S1 at-level); India is EOD-only
-(separate broker, no TWS). The cloud Action refreshes all three markets daily.
+<b><code>run_scan_live_us.bat</code></b> and <b><code>run_scan_live_asx.bat</code></b>
+(each market's last hour is at a different clock time, so live runners are split — run US at
+~3–4pm ET / ~5–6am AEST, ASX at ~3–4pm AEST / ~1–2am ET), plus the single-market
+<code>run_scan.bat</code> (US), <code>run_scan_asx.bat</code>, <code>run_scan_india.bat</code>.
+ASX trades via IBKR/TWS so it gets the same live last-hour refresh as US (S2 triggered/pending,
+S4 reclaimed/below-MA, S1 at-level); India is EOD-only (separate broker, no TWS). The cloud Action refreshes all three markets daily.
 <code>run_backtest.bat</code> regenerates the event-study reports.</p>
 </div>
 

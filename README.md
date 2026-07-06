@@ -134,7 +134,9 @@ guarantees liquidity. yfinance handles `.AX` / `.NS` natively.
 own JSON snapshot (`latest.json`, `latest_asx.json`, `latest_in.json`) and the
 cloud Action refreshes all three daily. Local buttons:
 `run_scan_all.bat` (US + ASX daily, via TWS — the recommended default),
-`run_scan_live.bat` (US + ASX last-hour real-time, local-only), and the
+`run_scan_live_us.bat` and `run_scan_live_asx.bat` (last-hour real-time,
+local-only — split because each market's last hour falls at a different clock
+time: US ~3–4pm ET / ~5–6am AEST, ASX ~3–4pm AEST / ~1–2am ET), and the
 single-market `run_scan.bat` / `run_scan_asx.bat` / `run_scan_india.bat`
 (and `.command` equivalents). ASX runs on IBKR/TWS so it shares the US live
 last-hour path (S2 triggered/pending, S4 reclaimed/below-MA, S1 at-level);
