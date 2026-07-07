@@ -624,7 +624,7 @@ def main():
     with tempfile.TemporaryDirectory() as td:
         h = open(_wr(drow, td + "/r.html", 1, 1, market="asx")).read()
         check("directional report has Live column + value",
-              ">Live<" in h and "reclaimed" in h and "101.5" in h)
+              'l:"Live"' in h and "reclaimed" in h and "101.5" in h)
 
     print("STFS-EQ imports: snapshot / qty / drift report")
     from .snapshot import build_snapshot

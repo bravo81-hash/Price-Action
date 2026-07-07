@@ -118,7 +118,10 @@ def main():
         n0 = len(rows)
         rows = [r for r in rows if r["score"] >= floor]
         print(f"[scan] score floor {floor}: {n0} -> {len(rows)} signals")
-    rows.sort(key=lambda r: r["score"], reverse=True)
+    # PRIME before enrichment: TWS budget (top-N in row order) must reach the
+    # highest-conviction rows first, not just highest raw score
+    mark_prime(rows, binfo, market=a.market)
+    rows.sort(key=lambda r: (bool(r.get("prime")), r["score"]), reverse=True)
 
     if directional:
         print(f"[scan] {len(rows)} signals; assigning long-only actions...")
@@ -135,7 +138,6 @@ def main():
         if CFG.earnings_enrich and not a.no_earnings:
             annotate_earnings(rows)
 
-    mark_prime(rows, binfo, market=a.market)
     compute_rank(rows)
     add_exit_levels(rows, market=a.market)
     rows.sort(key=lambda r: (bool(r.get("prime")), r.get("rank", 0), r["score"]),
