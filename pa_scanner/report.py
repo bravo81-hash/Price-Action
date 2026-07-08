@@ -135,7 +135,19 @@ _TEMPLATE = """<!doctype html>
    background:var(--panel);border:1px solid var(--bd);border-radius:8px;
    padding:10px 14px;max-height:60vh;overflow:auto;box-shadow:0 8px 24px #0008}
  .colpanel label{display:block;margin:4px 0;color:#c9d1d9;cursor:pointer}
- .colpanel .rst{margin-top:8px;width:100%}
+  .colpanel .rst{margin-top:8px;width:100%}
+ .board{padding:12px 20px;border-bottom:1px solid var(--bd);display:flex;
+   flex-wrap:wrap;gap:8px;align-items:stretch}
+ .board .bhdr{width:100%;color:var(--mut);font-size:11px;text-transform:uppercase;
+   letter-spacing:.5px;margin-bottom:2px}
+ .bcard{background:var(--panel);border:1px solid var(--bd);border-left-width:3px;
+   border-radius:6px;padding:7px 11px;min-width:190px;flex:1 1 190px}
+ .bcard .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+ .bcard .nm{font-weight:600}
+ .bcard .tier{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+ .bcard .rz2{color:var(--mut);font-size:11px;margin-top:3px;white-space:normal;line-height:1.35}
+ .bcard .alt{color:var(--accent);font-size:11px;margin-top:2px}
+ .bcard .hh{color:var(--mut);font-size:11px}
 </style></head><body>
 <header>
   <h1>__TITLE__</h1>
@@ -143,6 +155,7 @@ _TEMPLATE = """<!doctype html>
   <span class="meta">universe __UNIVERSE__ &middot; liquid __SCANNED__ &middot; signals __NHITS__</span>
   <span class="meta">__BENCH__</span>
 </header>
+<div class="board" id="board"></div>
 <div class="bar">
   <input id="q" placeholder="filter ticker...">__FILTERS__
   <span class="spacer"></span>
@@ -157,6 +170,7 @@ const ROWS = __ROWS__;
 const MODE = "__MODE__";        // "options" | "directional"
 const TVP  = "__TV__";          // TradingView exchange prefix, "" for US
 const ERNWARN = __ERNWARN__;
+const BOARD = __BOARD__;
 let view = ROWS.slice(), sortK = "rank", sortDir = -1, filt = "all", q = "";
 const $ = s => document.querySelector(s);
 function dispSym(t){ return MODE==="options" ? t : t.replace(/\\.(AX|NS)$/,''); }
@@ -398,6 +412,26 @@ $("#csv").onclick=()=>{
   a.href=URL.createObjectURL(blob);
   a.download="pa_scan___MKT___"+"__DATESTAMP__"+".csv"; a.click();
 };
+function renderBoard(){
+  const el=$("#board"); if(!el) return;
+  if(!BOARD || !BOARD.entries || !BOARD.entries.length){ el.style.display="none"; return; }
+  let h=`<div class="bhdr">Today's strategy order \u2014 ${BOARD.header}</div>`;
+  for(const e of BOARD.entries){
+    h+=`<div class="bcard" style="border-left-color:${e.color}" title="click to filter to ${e.code}" data-code="${e.code}">`+
+       `<div class="top"><span class="nm">${e.order}. ${e.code} <span class="hh">${e.name}</span></span>`+
+       `<span class="tier" style="color:${e.color}">${e.tier}</span></div>`+
+       `<div class="rz2">${e.reason}</div>`+
+       (e.alt?`<div class="alt">\u2192 ${e.alt}</div>`:"")+
+       `<div class="hh">${e.hits} hit${e.hits===1?"":"s"} today</div></div>`;
+  }
+  el.innerHTML=h;
+  el.querySelectorAll(".bcard").forEach(c=>c.onclick=()=>{
+    const code=c.dataset.code;
+    const btn=[...document.querySelectorAll(".bar button[data-f]")].find(b=>b.dataset.f===code);
+    if(btn) btn.click();
+  });
+}
+renderBoard();
 loadPrefs(); rebuild();
 </script></body></html>"""
 
@@ -414,6 +448,7 @@ def write_report(rows, path, scanned=0, universe=0, market="us", bench=None):
                 .replace("__FILTERS__", filters)
                 .replace("__MODE__", mkt["mode"])
                 .replace("__ERNWARN__", str(CFG.earnings_warn_days))
+                .replace("__BOARD__", json.dumps((bench or {}).get("board")) if bench else "null")
                 .replace("__BENCH__",
                          ((f"{bench['symbol']}: {bench['bias'].upper()} (ADX {bench['adx']})"
                            + (f"  \u00b7 {bench['snap']['state']} \u2014 {bench['snap']['guidance']} [context]"

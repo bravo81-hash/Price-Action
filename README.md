@@ -277,6 +277,18 @@ close (matching the app's "enter at signal close" assumption), not the next
 bar's open — a same-bar-fill assumption to be aware of when comparing results
 to slower, next-bar-open backtests.
 
+## Strategy board (daily cross-rule ranking)
+
+`pa_scanner/strategy_board.py` ranks the four live rules by conviction for the
+day and renders as cards above the table (report + dashboard, click a card to
+filter). Every tier is keyed to a backtest finding, conditioned on the
+benchmark regime: **PRIME** (S4 when bench bearish - MR supercharged, +5.6%
+US / +4.1% ASX @63d), **PREFERRED** (validated edge active: S3 premium, India
+S2 position, India S1 exits), **CONTEXT** (no measured entry edge), **CAUTION**
+(usable with a caveat, e.g. US S2 <=21d), **AVOID** (S1/S2 during a
+bench-bearish stand-down - card names the alternative). Order reshuffles with
+the regime; hit counts show the day's signal volume per rule.
+
 ## STFS-EQ imports
 
 Three pieces imported from the earlier `stfs-eq` project (audit verdicts in

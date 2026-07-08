@@ -626,6 +626,38 @@ def main():
         check("directional report has Live column + value",
               'l:"Live"' in h and "reclaimed" in h and "101.5" in h)
 
+    print("strategy board")
+    from .strategy_board import build_board
+    rws=[{"signal":"S4"}]*10+[{"signal":"S3"}]*5+[{"signal":"S1"}]*2+[{"signal":"S2"}]*3
+    bb=build_board("us","bearish",rws,"RISK_OFF")
+    order=[e["code"] for e in bb["entries"]]
+    tiers={e["code"]:e["tier"] for e in bb["entries"]}
+    check("board: S4 PRIME top when bench bearish", order[0]=="S4" and tiers["S4"]=="PRIME")
+    check("board: S1/S2 AVOID when bench bearish", tiers["S1"]=="AVOID" and tiers["S2"]=="AVOID")
+    check("board: AVOID rules carry an alternative",
+          all(e["alt"] for e in bb["entries"] if e["tier"]=="AVOID"))
+    check("board: hit counts attached", {e["code"]:e["hits"] for e in bb["entries"]}["S4"]==10)
+    bl=build_board("us","bullish",rws)
+    tb={e["code"]:e["tier"] for e in bl["entries"]}
+    check("board: S4 PREFERRED (not PRIME) when bench bullish", tb["S4"]=="PREFERRED")
+    check("board: S1 CONTEXT, S2 CAUTION in US bull", tb["S1"]=="CONTEXT" and tb["S2"]=="CAUTION")
+    ib={e["code"]:e["tier"] for e in build_board("in","neutral",rws)["entries"]}
+    check("board: India S2 PREFERRED (position trade)", ib["S2"]=="PREFERRED")
+    check("board: India S1 PREFERRED (exit flags)", ib["S1"]=="PREFERRED")
+    check("board: India S3 CONTEXT (no options edge)", ib["S3"]=="CONTEXT")
+    ax={e["code"]:e["tier"] for e in build_board("asx","neutral",rws)["entries"]}
+    check("board: ASX S2 CONTEXT (null all horizons)", ax["S2"]=="CONTEXT")
+    check("board: entries ordered by tier then hits",
+          all(bb["entries"][i]["tier_rank"]<=bb["entries"][i+1]["tier_rank"]
+              for i in range(len(bb["entries"])-1)))
+    from .report import write_report as _wrb
+    import tempfile
+    with tempfile.TemporaryDirectory() as tdb:
+        hb=open(_wrb([{"ticker":"A","signal":"S4","side":"long","score":0.6,"rank":9,"last":10,"atr":1}],
+                     tdb+"/b.html", market="us",
+                     bench={"symbol":"SPY","bias":"bearish","adx":26,"board":bb})).read()
+        check("report embeds board JSON", '"tier"' in hb and "PRIME" in hb)
+
     print("STFS-EQ imports: snapshot / qty / drift report")
     from .snapshot import build_snapshot
 

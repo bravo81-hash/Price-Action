@@ -17,6 +17,7 @@ from .action import add_action
 from .earnings import annotate_earnings
 from .ledger import update_ledger
 from .snapshot import build_snapshot
+from .strategy_board import build_board
 from .report import write_report
 from .webexport import write_web
 
@@ -142,6 +143,12 @@ def main():
     add_exit_levels(rows, market=a.market)
     rows.sort(key=lambda r: (bool(r.get("prime")), r.get("rank", 0), r["score"]),
               reverse=True)
+
+    board = build_board(a.market, (binfo or {}).get("bias"), rows,
+                        snap_state=snap["state"])
+    if binfo is not None:
+        binfo["board"] = board
+    print("[board] " + " > ".join(f"{e['code']}:{e['tier']}" for e in board["entries"]))
 
     if a.web:
         path = write_web(rows, a.web, scanned=len(bundle), universe=len(syms),

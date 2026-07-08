@@ -29,7 +29,16 @@
    background:var(--panel);border:1px solid var(--bd);border-radius:8px;
    padding:10px 14px;max-height:60vh;overflow:auto;box-shadow:0 8px 24px #0008}
  .colpanel label{display:block;margin:4px 0;color:#c9d1d9;cursor:pointer;white-space:nowrap}
- .colpanel .rst{margin-top:8px;width:100%}
+  .colpanel .rst{margin-top:8px;width:100%}
+ .board{padding:12px 20px;border-bottom:1px solid var(--bd);display:flex;flex-wrap:wrap;gap:8px}
+ .board .bhdr{width:100%;color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}
+ .bcard{background:var(--panel);border:1px solid var(--bd);border-left-width:3px;border-radius:6px;padding:7px 11px;min-width:190px;flex:1 1 190px;cursor:pointer}
+ .bcard .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+ .bcard .nm{font-weight:600}
+ .bcard .tier{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+ .bcard .rz2{color:var(--mut);font-size:11px;margin-top:3px;white-space:normal;line-height:1.35}
+ .bcard .alt{color:var(--accent);font-size:11px;margin-top:2px}
+ .bcard .hh{color:var(--mut);font-size:11px}
  button{background:var(--panel);border:1px solid var(--bd);color:var(--fg);
    padding:6px 12px;border-radius:6px;cursor:pointer;font:inherit}
  button:hover{border-color:var(--accent)}
@@ -84,6 +93,7 @@
   <button data-m="guide">Guide</button>
 </div>
 <div class="banner" id="banner"></div>
+<div class="board" id="board"></div>
 <div class="bar">
   <select id="snap" title="snapshot"></select>
   <input id="q" placeholder="filter ticker…">
@@ -302,6 +312,24 @@ any future promotion round. Stats: <code>python -m pa_scanner.ledger --market us
 loss / payoff / expectancy-per-trade, monthly drift buckets, S4-PRIME slice, and the oldest
 open positions.</p>
 
+<h2>Today's strategy order (the board)</h2>
+<p>The cards above the table rank the four rules by conviction <b>for the current regime</b> —
+each tier is tied to a backtest finding, not a heuristic. Tap a card to filter the table to that
+rule.</p>
+<ul>
+<li><b>PRIME</b> (gold) — must-consider. Only S4 in a bench-bearish regime: mean reversion is
+supercharged there (+5.6% US / +4.1% ASX excess @63d).</li>
+<li><b>PREFERRED</b> (green) — a validated edge is active (e.g. S3 premium selling; India S2
+position trade; India S1 exit flags).</li>
+<li><b>CONTEXT</b> (grey) — no measured entry edge; treat as candidate ideas / stand-aside flags.</li>
+<li><b>CAUTION</b> (amber) — usable with a caveat (e.g. US S2: don't hold past ~21d).</li>
+<li><b>AVOID</b> (red) — negative expectancy in this regime (S1/S2 during a bench-bearish
+stand-down). The card names the better alternative to use instead.</li>
+</ul>
+<p>The order reshuffles daily with the benchmark regime: on a bearish day S4 jumps to PRIME and
+S1/S2 drop to AVOID; on a bull day S4/S3 lead and S1/S2 fall to context. Hit counts show how many
+signals each rule actually produced today.</p>
+
 <h2>Columns (time-pressed workflow)</h2>
 <p>Columns are ordered left-to-right by <b>signal-quality weight</b> by default — the validated
 reads come first (Rank, RS, Vol-state, earnings/age gates), then execution levels
@@ -335,7 +363,7 @@ S4 reclaimed/below-MA, S1 at-level); India is EOD-only (separate broker, no TWS)
 const $ = s => document.querySelector(s);
 const SUF = {us:"", asx:"_asx", in:"_in"};
 const LABEL = {us:"US", asx:"ASX", in:"India"};
-let ROWS=[], view=[], sortK="rank", sortDir=-1, filt="all", q="";
+let ROWS=[], view=[], sortK="rank", sortDir=-1, filt="all", q="", BOARD=null;
 let market="us", MODE="options", TVP="";
 const ERNWARN = 10;
 
@@ -575,6 +603,25 @@ function render(){
   for(const r of view){ const tr=document.createElement("tr"); tr.innerHTML=rowHTML(r); tb.appendChild(tr); }
   $("#state").style.display = ROWS.length ? "none" : "block";
 }
+function renderBoard(){
+  const el=$("#board"); if(!el) return;
+  if(!BOARD || !BOARD.entries || !BOARD.entries.length){ el.style.display="none"; return; }
+  el.style.display="flex";
+  let h=`<div class="bhdr">Today's strategy order \u2014 ${BOARD.header}</div>`;
+  for(const e of BOARD.entries){
+    h+=`<div class="bcard" style="border-left-color:${e.color}" data-code="${e.code}">`+
+       `<div class="top"><span class="nm">${e.order}. ${e.code} <span class="hh">${e.name}</span></span>`+
+       `<span class="tier" style="color:${e.color}">${e.tier}</span></div>`+
+       `<div class="rz2">${e.reason}</div>`+
+       (e.alt?`<div class="alt">\u2192 ${e.alt}</div>`:"")+
+       `<div class="hh">${e.hits} hit${e.hits===1?"":"s"} today</div></div>`;
+  }
+  el.innerHTML=h;
+  el.querySelectorAll(".bcard").forEach(c=>c.onclick=()=>{
+    const btn=[...document.querySelectorAll(".bar button[data-f]")].find(b=>b.dataset.f===c.dataset.code);
+    if(btn) btn.click();
+  });
+}
 function applyData(d){
   ROWS = d.rows || [];
   MODE = d.mode || "options";
@@ -591,7 +638,9 @@ function applyData(d){
   } else if(!d.note){ b0.style.display="none"; }
   const b=$("#banner");
   if(d.note){ b.textContent = d.note; b.style.display="block"; } else { b.style.display="none"; }
+  BOARD = (d.bench && d.bench.board) ? d.bench.board : null;
   buildChrome();
+  renderBoard();
   $("#state").textContent = ROWS.length ? "" : "No signals in this snapshot.";
   render();
 }
@@ -628,6 +677,7 @@ function toggleView(m){
   $("#gen").textContent = isRef ? "" : $("#gen").textContent;
   $("#backtestPanel").style.display = (m==="backtest") ? "block" : "none";
   $("#guidePanel").style.display = (m==="guide") ? "block" : "none";
+  const bd=$("#board"); if(bd) bd.style.display = isRef ? "none" : (BOARD?"flex":"none");
   return isRef;
 }
 async function selectMarket(m){
