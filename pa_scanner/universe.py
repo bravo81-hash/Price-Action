@@ -92,7 +92,7 @@ ASX_100 = [
     "FLT", "WEB", "A2M", "DOW", "ANN", "ARB", "BRG", "REH", "SOL", "TNE",
     "NXT", "CWY", "SEK", "SGM", "MND", "NHF", "MFG", "AMP", "BEN", "BOQ",
     "NWL", "HUB", "PNI", "CGF", "TPG", "NEC", "NWS", "TLC", "EBO", "CIA",
-    "GOR", "CMM", "PLS", "LTR", "NIC", "SGR", "TAH", "QUB", "ALX", "VNT",
+    "CMM", "PLS", "LTR", "NIC", "SGR", "TAH", "QUB", "ALX", "VNT",
     "GMD", "PNV", "IEL", "ALQ", "ORA",
 ]
 

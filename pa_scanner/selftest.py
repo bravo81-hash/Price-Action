@@ -462,6 +462,15 @@ def main():
                           horizons=(3, 5, 10), out_dir=td, verbose=False)
         check("backtest produces events + files",
               len(r1["events"]) > 0 and os.path.exists(r1["report"]) and os.path.exists(r1["csv"]))
+        _reptxt = open(r1["report"]).read()
+        _has_s4 = any(e["signal"] == "S4" for e in r1["events"]
+                      if e["side"] in ("long", "short"))
+        _has_s12b = any(e.get("bench") for e in r1["events"]
+                        if e["signal"] in ("S1", "S2") and e["side"] in ("long", "short"))
+        check("report: S4 trigger-cell diagnostic present when S4 events exist",
+              (not _has_s4) or "S4 by trigger cell @" in _reptxt)
+        check("report: S1/S2-only regime slice present when bench available",
+              (not _has_s12b) or "S1/S2 (trend entries) by benchmark regime @" in _reptxt)
         check("baseline is seed-deterministic",
               [b["t"] for b in r1["baseline"]] == [b["t"] for b in r2["baseline"]])
         from .backtest import _matched, _side_base

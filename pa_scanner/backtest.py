@@ -755,6 +755,27 @@ def run_backtest(bundle, market="us", bench_daily=None, horizons=(1, 3, 5, 10),
     table("By weekly-trend alignment", _bucket(dir_ev, lambda e: f"{e['trend']}/{e['side']}"))
     if any(e.get("bench") for e in dir_ev):
         table("By benchmark regime", _bucket(dir_ev, lambda e: e.get("bench")))
+        # STAND-DOWN re-verification: the original -0.63%/t=-4.0 finding was
+        # S1/S2-specific, but the pooled regime table above is now diluted by
+        # S4. Slice trend entries alone so the stand-down evidence stays clean.
+        s12 = [e for e in dir_ev if e["signal"] in ("S1", "S2")]
+        if any(e.get("bench") for e in s12):
+            for h in horizons:
+                table(f"S1/S2 (trend entries) by benchmark regime @ {h}d",
+                      _bucket(s12, lambda e: e.get("bench")), horizon=f"ret{h}")
+
+    # S4 TRIGGER-CELL diagnostic: live pooled S4 blends two cells - the
+    # original RSI trigger (RSI3<15 + 2dn; label 'RSI3 n', wins on overlap)
+    # and the round-2 STRK4 fold-in (4+ down closes; label 'n-day flush').
+    # If pooled S4 excess drifted vs promotion-era, this shows which cell
+    # carries the edge and whether the fold-in diluted it.
+    s4 = [e for e in dir_ev if e["signal"] == "S4"]
+    if s4:
+        def _cell(e):
+            return ("rsi-cell(+overlap)" if str(e.get("label", "")).startswith("RSI3")
+                    else "streak-only")
+        for h in horizons:
+            table(f"S4 by trigger cell @ {h}d", _bucket(s4, _cell), horizon=f"ret{h}")
     table("S2 by age", _bucket([e for e in dir_ev if e["signal"] == "S2"], lambda e: f"age{e.get('age')}"))
     table("S1 by pattern", _bucket([e for e in dir_ev if e["signal"] == "S1"], lambda e: e.get("pattern")))
     table("By vol-state (rv-proxy)", _bucket(dir_ev, lambda e: e.get("vol_state")))

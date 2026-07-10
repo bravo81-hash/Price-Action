@@ -145,7 +145,7 @@ markets. Full per-slice tables live in <code>backtest/report_&lt;mkt&gt;.md</cod
 <li><span class="neu">PBEMA near-miss</span> (US 63d t=2.33, ASX 1.65 — below bar): parked in candidates.py for a future out-of-sample re-test.</li>
 <li><span class="neg">NH52, HVOL, GAPD failed</span>; candidate shorts were harmful everywhere (US all-shorts t=−3.9) — no short setups added.</li>
 <li>RS≥70 conditioning replicated in both markets (t=2.26 / 1.96), reinforcing the RS layer.</li>
-<li><b>Round 2 (OSMR family)</b>: STRK4 (4+ down closes) cleared the bar (US 5d t=3.17, ASX t=2.73 + ASX 21–63d persistence) and was folded into S4 as a second trigger. OSMR2 settled the parameter test — RSI(2) lost to RSI(3) in the US, so S4 keeps RSI(3)&lt;15. LO7/BBMR/IBSMR failed. Replicated regime findings: bench-bearish supercharges MR (US +5.57% @63d t=9.37, ASX +4.09% t=6.96 → S4 exempt from stand-down and the counter-index penalty); ASX MR excess grows with horizon (→ ASX S4 position template); high <b>realized</b>-vol names snapped hardest (t=2.86/5.65) — this is realized-vol rank, not implied vol / IVR.</li>
+<li><b>Round 2 (OSMR family)</b>: STRK4 (4+ down closes) cleared the bar (US 5d t=3.17, ASX t=2.73 + ASX 21–63d persistence) and was folded into S4 as a second trigger. OSMR2 settled the parameter test — RSI(2) lost to RSI(3) in the US, so S4 keeps RSI(3)&lt;15. LO7/BBMR/IBSMR failed. The raw bearish-regime slices (US +5.57% @63d t=9.37, ASX +4.09% t=6.96) were later <b>retired by the PRIME audit</b> — date-matched + block-bootstrapped they collapse to US −0.36% (CI [−3.60,+3.11], 94 days) and ASX −0.24% (CI [−2.10,+1.72], 95 days), both p≈0.60: date effect × clustering, not selection edge. ASX MR excess grows with horizon (→ ASX S4 position template); high <b>realized</b>-vol names snapped hardest (t=2.86/5.65) — realized-vol rank, not implied vol / IVR.</li>
 </ul></div>
 
 <div class="card"><b class="mkt">PRIME audit</b> — <code>--prime-audit</code> re-tests the S4/PRIME "+5.6% @63d" claim honestly: a <b>date-matched</b> baseline (each hit vs all longs available that same day, subtracting "stocks bounce on down days") and a <b>block bootstrap by date</b> (each selloff = one independent observation, not N clustered hits). Reports the corrected mean excess, a bootstrap 95% CI, and p(excess≤0). If the CI straddles 0, PRIME is attention/ordering only — never a sizing signal.</div>
@@ -181,7 +181,7 @@ channel with volume confirmation. Must be fresh (≤1 bar old) and not already e
 2+ down closes (round 1: US 5d t=3.44, ASX t=2.13), or a 4+ consecutive-down-close flush
 (round 2: US t=3.17, ASX t=2.73). US: 5-bar time exit. ASX: position template (3.5/4.5×ATR,
 63 bars — excess grows with horizon there). Exempt from the STAND-DOWN banner: MR outperforms
-in bearish regimes (+5.6% US / +4.1% ASX excess @63d).</td></tr>
+in bearish regimes — RETIRED: the date-matched PRIME audit (US and ASX both p≈0.60) showed the raw slice was date effect × clustering.</td></tr>
 <tr><td><b>S3</b></td><td>Range / chop (neutral)</td>
 <td>Low ADX, flat weekly EMAs, price mid-range, no boundary-pressing closes (which would mean
 coiling, not chopping). Validated in the backtest as genuine low-realized-move selection in
@@ -280,7 +280,7 @@ target 1.5×ATR, 10-bar time exit.</li>
 <li><b>US:</b> SL 2.0×ATR · PT 1.5×ATR · time exit <b>5 bars</b> — the edge is 3–10 days; do not linger.</li>
 <li><b>ASX:</b> position template — SL 3.5×ATR · PT 4.5×ATR · time exit <b>63 bars</b> (excess grows with horizon there).</li>
 <li><b>India:</b> standard 2.0×ATR / 1.5×ATR / <b>5-bar</b> time exit (same as US — only ASX gets the position template for S4).</li>
-<li><b>S4★ PRIME:</b> bench regime bearish → highest-conviction state (+5.6% US / +4.1% ASX excess @63d). Trade S4 normally (or up-size within plan) while the trend book stands down. <b>Do not upsize on PRIME</b>: the +5.6% figure is regime-unmatched and clustered (one selloff = many correlated rows), so treat PRIME as ordering/attention, not a sizing signal. Prefer higher realized-vol names — they snapped hardest (replicated).</li>
+<li><b>PRIME (retired):</b> the bearish-regime "supercharge" failed the date-matched + block-bootstrap audit in BOTH markets (US −0.36%, CI [−3.60,+3.11], p=0.60, 94 independent days; ASX −0.24%, CI [−2.10,+1.72], p=0.60, 95 days). S4 in bearish regimes = ordinary S4. It stays exempt from the S1/S2 stand-down <i>warning</i> (that evidence is trend-entry-specific), but there is no bearish bonus. Prefer higher realized-vol names — they snapped hardest (replicated).</li>
 <li><b>Never short</b> this or any setup here — candidate shorts were harmful in every market.</li>
 </ul></div>
 
@@ -324,7 +324,7 @@ each tier is tied to a backtest finding, not a heuristic. Tap a card to filter t
 rule.</p>
 <ul>
 <li><b>PRIME</b> (gold) — must-consider. Only S4 in a bench-bearish regime: mean reversion is
-supercharged there (+5.6% US / +4.1% ASX excess @63d).</li>
+was believed supercharged there — retired by the PRIME audit (US and ASX both p≈0.60 after date-matching + block bootstrap).</li>
 <li><b>PREFERRED</b> (green) — a validated edge is active (e.g. S3 premium selling; India S2
 position trade; India S1 exit flags).</li>
 <li><b>CONTEXT</b> (grey) — no measured entry edge; treat as candidate ideas / stand-aside flags.</li>

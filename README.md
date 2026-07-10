@@ -281,8 +281,12 @@ variant in the US parameter test) **or a 4+ consecutive-down-close flush**
 `s4_streak_min`). Exits: US 5-bar time exit (`s4_time_bars`) with 2.0/1.5 ATR;
 **ASX S4 uses the position template** (3.5/4.5 ATR, 63 bars) because ASX MR
 excess grows monotonically with horizon. **S4 is exempt from the STAND-DOWN
-banner and the counter-index penalty** — bench-bearish regimes supercharge
-mean reversion (US +5.57% excess @63d t=9.37, ASX +4.09% t=6.96). Rich-vol
+banner** — the raw bearish-regime slices looked strong
+(US +5.57% excess @63d t=9.37, ASX +4.09% t=6.96) but BOTH failed the
+date-matched + block-bootstrap PRIME audit (US: -0.36%, CI [-3.60,+3.11],
+p=0.60 on 94 independent days; ASX: -0.24%, CI [-2.10,+1.72], p=0.60 on 95
+days) — the apparent edge was date effect x clustering. PRIME is retired;
+S4 keeps its S1/S2-independent exemption from the stand-down WARNING only. Rich-vol
 names snap hardest (replicated t=2.86/5.65) — prefer higher-ATR% S4 hits. No
 short mirror — candidate shorts were harmful in every market (US t=−3.9).
 
@@ -315,8 +319,7 @@ to slower, next-bar-open backtests.
 `pa_scanner/strategy_board.py` ranks the four live rules by conviction for the
 day and renders as cards above the table (report + dashboard, click a card to
 filter). Every tier is keyed to a backtest finding, conditioned on the
-benchmark regime: **PRIME** (S4 when bench bearish - MR supercharged, +5.6%
-US / +4.1% ASX @63d), **PREFERRED** (validated edge active: S3 premium, India
+benchmark regime: **PREFERRED** (validated edge active: S3 premium, India
 S2 position, India S1 exits), **CONTEXT** (no measured entry edge), **CAUTION**
 (usable with a caveat, e.g. US S2 <=21d), **AVOID** (S1/S2 during a
 bench-bearish stand-down - card names the alternative). Order reshuffles with
