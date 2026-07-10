@@ -135,7 +135,11 @@ class Config:
     in_pos_tgt_atr: float = 4.5        # from 63d med MFE ~ +9.6%
     in_pos_time_bars: int = 63
     risk_dollars: float = 0.0          # >0 -> Qty column = floor(risk / stop distance)
-    s4_prime: bool = True              # star S4 rows when the bench regime is bearish
+    s4_prime: bool = False             # RETIRED by the date-matched audit (US, 795 hits
+                                       # / 94 independent days: excess -0.36%, CI [-3.6,+3.1],
+                                       # p<=0 = 0.60): S4 in bearish regimes adds nothing beyond
+                                       # being long that day. Re-enable only if a market's
+                                       # --prime-audit CI clears zero.
     ledger_keep_resolved: int = 1000   # resolved forward-ledger entries kept per market
     bench_standdown: bool = True       # warn when the benchmark regime reads bearish
                                        # (5y US study: all signals -0.63% excess, t=-4.0)

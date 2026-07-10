@@ -292,12 +292,14 @@ target 1.5×ATR, 10-bar time exit.</li>
 <li>Exit levels are printed per row (<b>Stop / Tgt / time_exit</b>) — no mental math at entry time.</li>
 </ul></div>
 
-<h2>S4★ PRIME</h2>
-<p>When the benchmark regime reads bearish, S4 rows are starred gold (<b>S4★</b>) and sort to
-the top — that cell is the single strongest result in the entire backtest program (+5.57%
-excess @63d, t=9.4 US; +4.09%, t=7.0 ASX, replicated). The stand-down banner applies to
-S1/S2 trend entries only; S4★ rows are the exception, not a contradiction. Filter chip:
-<b>S4★ Prime</b>. India is excluded (cell untested there).</p>
+<h2>S4★ PRIME — retired</h2>
+<p><b>Retired by the date-matched audit (config default off).</b> The "+5.57% @63d, t=9.4"
+cell did not survive honest testing: 795 hits collapse to <b>94 independent bearish dates</b>,
+and against a same-date all-longs baseline the excess is <b>−0.36%</b> (95% bootstrap CI
+[−3.60%, +3.11%], p(≤0)=0.60) — S4 selection adds nothing beyond being long on a down day.
+The raw number was date effect × clustering. S4 itself remains the app's best rule (the only
+one with positive realized OCO expectancy); it just isn't "supercharged" by bearish regimes.
+Run <code>--prime-audit</code> per market before ever re-enabling <code>s4_prime</code>.</p>
 
 <h2>Market state line + Qty (STFS-EQ imports)</h2>
 <p>The header shows a <b>market state</b> next to the benchmark regime —
@@ -641,7 +643,7 @@ function applyData(d){
   $("#counts").textContent = `universe ${d.universe??"?"} · liquid ${d.scanned??"?"} · signals ${d.count??ROWS.length}${bench}`;
   const b0=$("#banner");
   if(d.bench && d.bench.bias==="bearish"){
-    b0.textContent = `⚠ STAND-DOWN — ${d.bench.symbol} regime bearish. Trend entries (S1/S2): −0.63% excess (t=−4.0) — reduce size / stand aside. S4 snapbacks EXEMPT: mean reversion outperforms in bearish regimes (+5.6% US / +4.1% ASX excess @63d).`;
+    b0.textContent = `⚠ STAND-DOWN — ${d.bench.symbol} regime bearish. Trend entries (S1/S2): −0.63% excess (t=−4.0) — reduce size / stand aside. S4 exempt from this warning (the stand-down evidence is S1/S2-specific). The bearish-regime S4 'supercharge' was retired by the date-matched audit.`;
     b0.style.display="block";
   } else if(!d.note){ b0.style.display="none"; }
   const b=$("#banner");

@@ -518,8 +518,8 @@ def main():
            {"ticker": "STR", "side": "long", "score": 0.5, "signal": "S2"}]
     add_market_context(exm, {"STR": (make_s2("long"), dl.to_weekly(make_s2("long")))},
                        make_s2("short"), market="us")   # bearish bench
-    check("S4 exempt from the counter-index penalty",
-          exm[0]["score"] > exm[1]["score"])
+    check("S4 no longer exempt from the counter-index penalty (audit)",
+          exm[0]["score"] == exm[1]["score"])
 
     # parity incl. S4-capable history (280 bars, uptrend + terminal flush)
     def s4_frame(n=280, seed=5):
@@ -542,10 +542,14 @@ def main():
 
     print("S4 PRIME + forward ledger")
     from .scanner import mark_prime
+    pr0 = [{"signal": "S4", "side": "long", "score": 0.6}]
+    mark_prime(pr0, {"bias": "bearish"}, market="us")
+    check("PRIME retired: default OFF even when bench bearish", not pr0[0]["prime"])
+    CFG.s4_prime = True
     pr = [{"signal": "S4", "side": "long", "score": 0.6},
           {"signal": "S2", "side": "long", "score": 0.6}]
     mark_prime(pr, {"bias": "bearish"}, market="us")
-    check("PRIME set on S4 only when bench bearish",
+    check("PRIME (re-enabled) sets S4 only when bench bearish",
           pr[0]["prime"] and not pr[1]["prime"])
     pr2 = [{"signal": "S4", "side": "long", "score": 0.6}]
     mark_prime(pr2, {"bias": "bullish"}, market="us")
@@ -553,6 +557,7 @@ def main():
     pr3 = [{"signal": "S4", "side": "long", "score": 0.6}]
     mark_prime(pr3, {"bias": "bearish"}, market="in")
     check("no PRIME in India (cell untested)", not pr3[0]["prime"])
+    CFG.s4_prime = False
 
     from .ledger import update_ledger, _resolve_entry, _load
     def lframe(path_prices):
@@ -632,7 +637,8 @@ def main():
     bb=build_board("us","bearish",rws,"RISK_OFF")
     order=[e["code"] for e in bb["entries"]]
     tiers={e["code"]:e["tier"] for e in bb["entries"]}
-    check("board: S4 PRIME top when bench bearish", order[0]=="S4" and tiers["S4"]=="PRIME")
+    check("board: S4 PREFERRED (not PRIME) even when bench bearish - PRIME retired",
+          order[0] == "S4" and tiers["S4"] == "PREFERRED")
     check("board: S1/S2 AVOID when bench bearish", tiers["S1"]=="AVOID" and tiers["S2"]=="AVOID")
     check("board: AVOID rules carry an alternative",
           all(e["alt"] for e in bb["entries"] if e["tier"]=="AVOID"))
@@ -656,7 +662,7 @@ def main():
         hb=open(_wrb([{"ticker":"A","signal":"S4","side":"long","score":0.6,"rank":9,"last":10,"atr":1}],
                      tdb+"/b.html", market="us",
                      bench={"symbol":"SPY","bias":"bearish","adx":26,"board":bb})).read()
-        check("report embeds board JSON", '"tier"' in hb and "PRIME" in hb)
+        check("report embeds board JSON", '"tier"' in hb and "PREFERRED" in hb)
 
     print("IBKR contract spec + live fail-loud")
     from .config import contract_spec

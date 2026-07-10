@@ -339,10 +339,15 @@ the regime engine/order server/IVP (overlap or scope conflicts).
 
 ## S4★ PRIME + forward ledger
 
-**PRIME:** when the benchmark regime reads bearish, S4 rows are starred
-(`S4★`, gold tag) and sort first — S4-during-bench-bearish is the strongest
-cell in the whole study (+5.57% excess @63d t=9.37 US; +4.09% t=6.96 ASX).
-Toggle `s4_prime`; India excluded (untested cell).
+**PRIME (RETIRED):** the date-matched, block-bootstrapped audit
+(`--prime-audit`) killed the underlying cell — US: 795 hits across only 94
+independent bearish dates, date-matched excess **−0.36%**, 95% CI
+[−3.60%, +3.11%], p(≤0)=0.60. S4 in bearish regimes adds nothing beyond being
+long that day; the raw +5.57% was date effect × clustering. `s4_prime` now
+defaults **False** (plumbing kept; re-enable only for a market whose own
+prime-audit CI clears zero). The S4 index-penalty exemption, which rested on
+the same cell, is also removed. OCO simulation shows S4 remains the only rule
+with positive realized exit-policy expectancy (US +0.053R/trade pre-cost).
 
 **Forward ledger:** each scan appends its hits to
 `docs/data/ledger_<mkt>.json` (entry = signal close, exits from the row's

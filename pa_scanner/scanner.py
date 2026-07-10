@@ -281,7 +281,9 @@ def add_market_context(rows, bundle, bench_daily=None, market="us"):
             adj += CFG.rs_adj_max * (p - 50) / 50
         elif r["side"] == "short":
             adj += CFG.rs_adj_max * (50 - p) / 50
-        if binfo and r.get("signal") != "S4":   # S4/MR thrives in bearish regimes
+        if binfo:   # counter-index penalty applies to ALL rules; the old S4
+                    # exemption rested on the PRIME cell the date-matched audit
+                    # killed (excess -0.36%, CI straddles 0)
             if r["side"] == "long" and binfo["bias"] == "bearish":
                 adj -= CFG.index_penalty
             elif r["side"] == "short" and binfo["bias"] == "bullish":
@@ -302,10 +304,11 @@ def _clip01_f(x):
 
 
 def mark_prime(rows, binfo, market="us"):
-    """S4 PRIME: the strongest cell in the entire study - S4 during a
-    bench-bearish regime (+5.57% excess @63d t=9.37 US; +4.09% t=6.96 ASX,
-    replicated). Flags those rows so they sort first and render starred.
-    India excluded (cell untested there)."""
+    """S4 PRIME - RETIRED (CFG.s4_prime defaults False). The date-matched,
+    block-bootstrapped audit killed the underlying cell: US excess -0.36%,
+    95% CI [-3.60, +3.11], p(<=0)=0.60 across 94 independent bearish dates.
+    The raw +5.57% was date effect x clustering. Plumbing kept so a market
+    whose own --prime-audit CI clears zero can re-enable it."""
     if not (CFG.s4_prime and binfo and binfo.get("bias") == "bearish"
             and market in ("us", "asx")):
         for r in rows:
