@@ -360,26 +360,35 @@ def add_exit_levels(rows, market="us"):
                     or (market == "asx" and r.get("signal") == "S4"))
         stop_k = CFG.in_pos_stop_atr if position else CFG.exit_stop_atr
         tgt_k = CFG.in_pos_tgt_atr if position else CFG.exit_target_atr
+        # compute levels at RAW precision first (sub-dollar ASX names lose the
+        # whole stop distance to 2dp rounding); round only for display.
+        raw_stop = raw_tgt = None
         if r["side"] == "long":
-            r["stop"] = round(last - stop_k * atr, 2)
-            r["tgt"] = round(last + tgt_k * atr, 2)
+            raw_stop, raw_tgt = last - stop_k * atr, last + tgt_k * atr
         elif r["side"] == "short":
-            r["stop"] = round(last + stop_k * atr, 2)
-            r["tgt"] = round(last - tgt_k * atr, 2)
-        else:  # neutral: condor short-strike references
-            r["stop"] = r.get("range_lo")
-            r["tgt"] = r.get("range_hi")
+            raw_stop, raw_tgt = last + stop_k * atr, last - tgt_k * atr
+        else:  # neutral: condor short-strike references (already price levels)
+            raw_stop, raw_tgt = r.get("range_lo"), r.get("range_hi")
+        # display precision scales with price: cheap names need more decimals,
+        # normal names stay clean. Qty already used the RAW distance above.
+        dp = 4 if last < 1.0 else (3 if last < 10.0 else 2)
+        r["stop"] = round(raw_stop, dp) if raw_stop is not None else None
+        r["tgt"] = round(raw_tgt, dp) if raw_tgt is not None else None
         if position:
             r["time_exit"] = CFG.in_pos_time_bars
         elif r.get("signal") == "S4":
             r["time_exit"] = CFG.s4_time_bars
         else:
             r["time_exit"] = CFG.exit_time_bars
-        # position size at the printed stop (STFS-EQ battle-card import)
+        # position size from the RAW stop distance. Disabled on US option rows:
+        # underlying stop distance is NOT option max loss (ignores the 100x
+        # multiplier and the Greeks), so a share count there is meaningless.
         r["qty"] = None
-        if (CFG.risk_dollars > 0 and r["side"] in ("long", "short")
-                and r.get("stop") is not None and abs(last - r["stop"]) > 0):
-            r["qty"] = int(CFG.risk_dollars // abs(last - r["stop"]))
+        is_option_row = (market == "us")
+        if (CFG.risk_dollars > 0 and not is_option_row
+                and r["side"] in ("long", "short")
+                and raw_stop is not None and abs(last - raw_stop) > 0):
+            r["qty"] = int(CFG.risk_dollars // abs(last - raw_stop))
     return rows
 
 

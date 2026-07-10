@@ -719,13 +719,25 @@ def main():
     check("snapshot: CHOP default", build_snapshot(flat)["state"] == "CHOP_NO_EDGE")
 
     CFG.risk_dollars = 1000.0
-    qr = [{"side": "long", "signal": "S2", "last": 100.0, "atr": 2.0}]
-    add_exit_levels(qr, market="us")
-    check("qty = risk / stop distance", qr[0]["qty"] == 250)   # 1000 / 4.0
+    # US is options-mode: qty must be DISABLED (stop distance != option max loss)
+    qr_us = [{"side": "long", "signal": "S2", "last": 100.0, "atr": 2.0}]
+    add_exit_levels(qr_us, market="us")
+    check("qty disabled on US option rows", qr_us[0]["qty"] is None)
+    # ASX is stock: qty = risk / raw stop distance (2.0 ATR -> 4.0)
+    qr_asx = [{"side": "long", "signal": "S2", "last": 100.0, "atr": 2.0}]
+    add_exit_levels(qr_asx, market="asx")
+    check("qty = risk / stop distance on ASX stock", qr_asx[0]["qty"] == 250)
+    # sub-dollar ASX name: raw stop distance survives (2dp would zero it).
+    # ASX S4 uses the 3.5x ATR position template -> distance 3.5*0.006 = 0.021
+    qr_penny = [{"side": "long", "signal": "S4", "last": 0.20, "atr": 0.006}]
+    add_exit_levels(qr_penny, market="asx")
+    dist = abs(0.20 - qr_penny[0]["stop"])
+    check("sub-dollar stop distance not rounded away",
+          abs(dist - 0.021) < 1e-9 and qr_penny[0]["qty"] == int(1000.0 // 0.021))
     CFG.risk_dollars = 0.0
-    qr2 = [{"side": "long", "signal": "S2", "last": 100.0, "atr": 2.0}]
-    add_exit_levels(qr2, market="us")
-    check("qty off by default", qr2[0]["qty"] is None)
+    qr_off = [{"side": "long", "signal": "S2", "last": 100.0, "atr": 2.0}]
+    add_exit_levels(qr_off, market="asx")
+    check("qty off by default", qr_off[0]["qty"] is None)
 
     from .ledger import print_report as _lpr, _save as _lsave
     with tempfile.TemporaryDirectory() as tdd:
