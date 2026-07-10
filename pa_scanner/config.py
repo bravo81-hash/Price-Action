@@ -118,7 +118,8 @@ class Config:
     index_penalty: float = 0.10        # counter-index-regime score penalty
     min_score: float = 0.45            # post-adjustment score floor (CLI --min-score)
     earnings_enrich: bool = True       # US: annotate days-to-earnings on hits (yfinance)
-    earnings_warn_days: int = 10       # <= this many days = warn tint / filter
+    earnings_warn_days: int = 10       # directional: <= this many days = warn
+    s3_earnings_tenor: int = 60        # S3 premium: earnings must clear the whole 30-60 DTE window
 
     # --- S4: oversold snapback (promoted candidate OSMR; US 5d t=3.44, ASX t=2.13) ---
     s4_rsi_max: float = 15.0           # RSI(3) must be below this

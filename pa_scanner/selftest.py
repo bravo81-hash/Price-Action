@@ -681,6 +681,19 @@ def main():
     check("live NOT ok when TWS unavailable (fail-loud precondition)",
           lhealth["ok"] is False)
 
+    print("S3-aware earnings status")
+    from .earnings import _ern_status
+    check("S3 earnings inside 60d tenor -> inside",
+          _ern_status({"signal": "S3", "ern": 20, "time_exit": 10}) == "inside")
+    check("S3 earnings past 60d tenor -> safe",
+          _ern_status({"signal": "S3", "ern": 70, "time_exit": 10}) == "safe")
+    check("directional earnings past its hold -> safe",
+          _ern_status({"signal": "S4", "ern": 12, "time_exit": 5}) == "safe")
+    check("directional earnings inside its hold -> inside",
+          _ern_status({"signal": "S2", "ern": 8, "time_exit": 10}) == "inside")
+    check("unknown earnings -> unknown (must NOT read as safe)",
+          _ern_status({"signal": "S3", "ern": None}) == "unknown")
+
     print("STFS-EQ imports: snapshot / qty / drift report")
     from .snapshot import build_snapshot
 

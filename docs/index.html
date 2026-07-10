@@ -371,7 +371,7 @@ let COLS = null;   // quality-weighted column model, built in buildCols() after 
 let prefs = {order:null, hidden:[], widths:{}};
 const FILTERS = {
   options:[["all","All"],["S1","S1 reversal"],["S2","S2 breakout"],["S3","S3 chop"],["S4","S4 snapback"],["prime","S4★ Prime"],
-    ["long","Long"],["short","Short"],["neutral","Neutral"],["rs","RS>50"],["ern","Ern OK"]],
+    ["long","Long"],["short","Short"],["neutral","Neutral"],["rs","RS>50"],["ern","Ern safe"]],
   directional:[["all","All"],["buy","Buy"],["hold","Hold"],["exit","Exit / Trim"],
     ["avoid","Avoid / Watch"],["S1","S1"],["S2","S2"],["S3","S3"],["S4","S4"],["prime","S4★"],["rs","RS>50"]]
 };
@@ -557,8 +557,12 @@ function rsCell(r){
   return `<span style="color:${c}" title="${t}">${r.rs_pct}</span>`;
 }
 function ernCell(r){
-  if(r.ern==null) return "";
-  return r.ern<=ERNWARN ? `<b style="color:#d29922">${r.ern}</b>` : `${r.ern}`;
+  if(r.ern==null){
+    return r.ern_status==="unknown" ? `<span class="src" style="color:#d29922" title="earnings date unknown - not confirmed safe">?</span>` : "";
+  }
+  if(r.ern_status==="inside") return `<b style="color:#f85149" title="earnings inside the intended tenor">${r.ern}</b>`;
+  if(r.ern_status==="unknown") return `<span style="color:#d29922">${r.ern}?</span>`;
+  return `<span title="clears the tenor">${r.ern}</span>`;
 }
 function actionCell(r){
   const T={pos:'#3fb950',warn:'#d29922',exit:'#f85149'};
@@ -582,7 +586,7 @@ function passes(r){
   if(filt==="S1"||filt==="S2"||filt==="S3"||filt==="S4") return r.signal===filt;
   if(filt==="prime") return !!r.prime;
   if(filt==="rs") return r.rs_pct!=null && r.rs_pct>50;
-  if(filt==="ern") return r.ern==null || r.ern>ERNWARN;
+  if(filt==="ern") return r.ern_status==="safe" || r.ern_status==="n/a";
   if(MODE==="directional"){
     if(filt==="buy")   return r.action==="BUY";
     if(filt==="hold")  return r.action==="HOLD";

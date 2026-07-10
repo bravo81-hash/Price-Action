@@ -69,7 +69,7 @@ _FILTERS_OPTIONS = """
   <button data-f="short">Short</button>
   <button data-f="neutral">Neutral</button>
   <button data-f="rs">RS&gt;50</button>
-  <button data-f="ern">Ern OK</button>"""
+  <button data-f="ern">Ern safe</button>"""
 
 _FILTERS_DIRECTIONAL = """
   <button data-f="all" class="on">All</button>
@@ -224,8 +224,12 @@ function rsCell(r){
   return `<span style="color:${c}" title="${t}">${r.rs_pct}</span>`;
 }
 function ernCell(r){
-  if(r.ern==null) return "";
-  return r.ern<=ERNWARN ? `<b style="color:#d29922">${r.ern}</b>` : `${r.ern}`;
+  if(r.ern==null){
+    return r.ern_status==="unknown" ? `<span class="src" style="color:#d29922" title="earnings date unknown - not confirmed safe">?</span>` : "";
+  }
+  if(r.ern_status==="inside") return `<b style="color:#f85149" title="earnings inside the intended tenor">${r.ern}</b>`;
+  if(r.ern_status==="unknown") return `<span style="color:#d29922">${r.ern}?</span>`;
+  return `<span title="clears the tenor">${r.ern}</span>`;
 }
 function actionCell(r){
   const T={pos:'#3fb950',warn:'#d29922',exit:'#f85149'};
@@ -365,7 +369,7 @@ function passes(r){
   if(["S1","S2","S3","S4"].includes(filt)) return r.signal===filt;
   if(filt==="prime") return !!r.prime;
   if(filt==="rs") return r.rs_pct!=null && r.rs_pct>50;
-  if(filt==="ern") return r.ern==null || r.ern>ERNWARN;
+  if(filt==="ern") return r.ern_status==="safe" || r.ern_status==="n/a";
   if(MODE==="directional"){
     if(filt==="buy")   return r.action==="BUY";
     if(filt==="hold")  return r.action==="HOLD";

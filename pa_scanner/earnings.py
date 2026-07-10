@@ -1,3 +1,4 @@
+from .config import CFG
 """Days-to-earnings enrichment (US hits only; yfinance, best-effort).
 
 yfinance calendar data is flaky - shapes vary by version and it rate-limits on
@@ -54,6 +55,26 @@ def annotate_earnings(rows, cap=150):
             cache[t] = days_to_earnings(t)
             done += 1
         r["ern"] = cache[t]
+        r["ern_status"] = _ern_status(r)
     n = sum(1 for r in rows if r.get("ern") is not None)
     print(f"[earnings] dates on {n}/{len(rows)} hits ({done} lookups)")
     return rows
+
+
+def _ern_status(r):
+    """Classify earnings risk against the row's own intended horizon.
+
+    - safe    : next earnings falls AFTER the intended trade/tenor window
+    - inside  : earnings land inside the window (a landmine)
+    - unknown : no date available (must NOT pass an 'OK' filter)
+    S3 uses the full premium tenor (30-60 DTE); directional rows use their
+    time_exit (bars ~ trading days), floored at the directional warn window.
+    """
+    d = r.get("ern")
+    if d is None:
+        return "unknown"
+    if r.get("signal") == "S3":
+        window = CFG.s3_earnings_tenor
+    else:
+        window = max(CFG.earnings_warn_days, int(r.get("time_exit") or 0))
+    return "inside" if d <= window else "safe"
