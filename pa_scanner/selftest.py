@@ -469,6 +469,11 @@ def main():
                         if e["signal"] in ("S1", "S2") and e["side"] in ("long", "short"))
         check("report: S4 trigger-cell diagnostic present when S4 events exist",
               (not _has_s4) or "S4 by trigger cell @" in _reptxt)
+        _s4ev = [e for e in r1["events"] if e["signal"] == "S4"]
+        check("S4 events carry rsi3/streak meta (trigger-cell classifiable)",
+              (not _s4ev) or all(("rsi3" in e and "streak" in e) for e in _s4ev))
+        check("trigger-cell table never silently 'unknown' on real events",
+              (not _s4ev) or "| unknown |" not in _reptxt)
         check("report: S1/S2-only regime slice present when bench available",
               (not _has_s12b) or "S1/S2 (trend entries) by benchmark regime @" in _reptxt)
         check("baseline is seed-deterministic",

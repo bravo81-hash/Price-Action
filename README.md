@@ -160,7 +160,7 @@ Honest positioning after 59k backtested events across all three markets:
   underperformance (+0.54% excess over 10d, t=3.0). The long-only tab's
   get-out logic is the strongest result in the study.
 - **US bench-bearish stand-down is real risk information**: all signals fired
-  while SPY reads bearish lose −0.63% excess (t=−4.0). The dashboard and
+  while SPY reads bearish lose −0.70% excess @5d (t=−6.05), negative at every horizon on the clean S1/S2-only slice (to −1.59% @42d, t=−4.36). The dashboard and
   report show a STAND-DOWN banner in that state (`bench_standdown`).
 - **S3 quiet-name selection works in all three markets** (~8–10% lower 10-day
   absolute move than baseline) — the condor-selection function is the app's

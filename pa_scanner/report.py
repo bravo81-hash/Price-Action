@@ -457,7 +457,7 @@ def write_report(rows, path, scanned=0, universe=0, market="us", bench=None):
                          ((f"{bench['symbol']}: {bench['bias'].upper()} (ADX {bench['adx']})"
                            + (f"  \u00b7 {bench['snap']['state']} \u2014 {bench['snap']['guidance']} [context]"
                               if bench.get("snap") else "")
-                           + ("  \u26a0 STAND-DOWN: bench bearish; trend entries (S1/S2) -0.63% excess (t=-4.0). S4 exempt from this warning (stand-down evidence is S1/S2-specific); note the bearish-regime S4 'supercharge' was retired by the date-matched audit"
+                           + ("  \u26a0 STAND-DOWN: bench bearish; trend entries (S1/S2) -0.70% excess @5d (t=-6.05), negative at every horizon (clean S1/S2-only slice). S4 exempt from this warning (stand-down evidence is S1/S2-specific); note the bearish-regime S4 'supercharge' was retired by the date-matched audit"
                               if CFG.bench_standdown and bench["bias"] == "bearish" else ""))
                           if bench else ""))
                 .replace("__TV__", mkt["tv"])

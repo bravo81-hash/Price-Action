@@ -764,16 +764,25 @@ def run_backtest(bundle, market="us", bench_daily=None, horizons=(1, 3, 5, 10),
                 table(f"S1/S2 (trend entries) by benchmark regime @ {h}d",
                       _bucket(s12, lambda e: e.get("bench")), horizon=f"ret{h}")
 
-    # S4 TRIGGER-CELL diagnostic: live pooled S4 blends two cells - the
-    # original RSI trigger (RSI3<15 + 2dn; label 'RSI3 n', wins on overlap)
-    # and the round-2 STRK4 fold-in (4+ down closes; label 'n-day flush').
-    # If pooled S4 excess drifted vs promotion-era, this shows which cell
-    # carries the edge and whether the fold-in diluted it.
+    # S4 TRIGGER-CELL diagnostic: live pooled S4 blends the original RSI cell
+    # (RSI3<15 + 2dn) with the round-2 STRK4 fold-in (4+ down closes). Classify
+    # from the numeric meta every S4 event carries (rsi3/streak) - three cells:
+    #   rsi-only      RSI trigger, streak < 4 (pre-fold-in population)
+    #   rsi+streak    both triggers fire (also pre-fold-in - RSI caught these)
+    #   streak-only   ONLY the fold-in fires (rsi3 >= 15) - the added events
+    # If pooled S4 excess drifted vs promotion-era, streak-only shows whether
+    # the fold-in diluted it. 'unknown' means meta is missing (a bug, visible).
     s4 = [e for e in dir_ev if e["signal"] == "S4"]
     if s4:
         def _cell(e):
-            return ("rsi-cell(+overlap)" if str(e.get("label", "")).startswith("RSI3")
-                    else "streak-only")
+            r, k = e.get("rsi3"), e.get("streak")
+            if r is None or k is None:
+                return "unknown"
+            rsi_trig = r < CFG.s4_rsi_max and k >= 2
+            streak_trig = k >= CFG.s4_streak_min
+            if rsi_trig and streak_trig:
+                return "rsi+streak"
+            return "rsi-only" if rsi_trig else "streak-only"
         for h in horizons:
             table(f"S4 by trigger cell @ {h}d", _bucket(s4, _cell), horizon=f"ret{h}")
     table("S2 by age", _bucket([e for e in dir_ev if e["signal"] == "S2"], lambda e: f"age{e.get('age')}"))

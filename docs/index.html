@@ -120,7 +120,7 @@ markets. Full per-slice tables live in <code>backtest/report_&lt;mkt&gt;.md</cod
 <li><span class="neu">S1/S2 directional entries: no aggregate alpha</span> after drift correction (all rule×side |t|&lt;1.6 at 10d).</li>
 <li><span class="neg">Do not extend directional holds past ~21 days</span> — excess turns significantly negative at 42–63d (S2 t=−4.6 to −5.4; longs alone −1.4%, t=−2.9). Part is vol/beta composition (signals cluster in high-ATR names), but the conclusion holds.</li>
 <li><span class="pos">S3 quiet-name selection persists to 63d</span> (11.3% vs 12.7% baseline abs move). This is a <b>quietness-persistence screen</b>, not a validated option edge: the harness shows the underlying stays quiet, not that any condor/calendar is profitable. 30–60 DTE is a reasonable tenor to pair with it; option expectancy (spreads, fills, assignment) is untested here.</li>
-<li><span class="neg">Bench-bearish stand-down is real and strengthens with horizon</span>: −0.63% excess at 10d (t=−4.0) → −2.45% at 63d (t=−4.5). Dashboard shows a STAND-DOWN banner in this state.</li>
+<li><span class="neg">Bench-bearish stand-down re-verified on a clean S1/S2-only slice (undiluted by S4)</span>: negative at every horizon — −0.70% @5d (t=−6.05), −0.90% @10d (t=−5.77), −1.15% @21d (t=−4.93), −1.59% @42d (t=−4.36), −1.28% @63d (t=−2.78). Dashboard shows a STAND-DOWN banner in this state.</li>
 <li><span class="neg">evening_star retired</span> as an S1 trigger — worst-of-side pattern in every market (US t=−6.0).</li>
 <li>Score deciles are flat over 5y — score/rank are list organizers, not predictive.</li>
 </ul></div>
@@ -643,7 +643,7 @@ function applyData(d){
   $("#counts").textContent = `universe ${d.universe??"?"} · liquid ${d.scanned??"?"} · signals ${d.count??ROWS.length}${bench}`;
   const b0=$("#banner");
   if(d.bench && d.bench.bias==="bearish"){
-    b0.textContent = `⚠ STAND-DOWN — ${d.bench.symbol} regime bearish. Trend entries (S1/S2): −0.63% excess (t=−4.0) — reduce size / stand aside. S4 exempt from this warning (the stand-down evidence is S1/S2-specific). The bearish-regime S4 'supercharge' was retired by the date-matched audit.`;
+    b0.textContent = `⚠ STAND-DOWN — ${d.bench.symbol} regime bearish. Trend entries (S1/S2): −0.70% excess @5d (t=−6.05), negative at every horizon — reduce size / stand aside. S4 exempt from this warning (the stand-down evidence is S1/S2-specific). The bearish-regime S4 'supercharge' was retired by the date-matched audit.`;
     b0.style.display="block";
   } else if(!d.note){ b0.style.display="none"; }
   const b=$("#banner");
