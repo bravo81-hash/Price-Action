@@ -346,6 +346,82 @@ def _fwd(e, arrs, horizons, max_h):
     return e
 
 
+def _template_for(signal, side, market):
+    """The exact stop/target/time template add_exit_levels() would assign,
+    so the simulation tests the policy the app actually prints."""
+    position = ((market == "in" and signal == "S2" and side == "long")
+                or (market == "asx" and signal == "S4"))
+    if position:
+        return CFG.in_pos_stop_atr, CFG.in_pos_tgt_atr, CFG.in_pos_time_bars
+    if signal == "S4":
+        return CFG.exit_stop_atr, CFG.exit_target_atr, CFG.s4_time_bars
+    return CFG.exit_stop_atr, CFG.exit_target_atr, CFG.exit_time_bars
+
+
+def _simulate_oco(e, arrs, market):
+    """Replay one directional event as the OCO bracket the app prints:
+    entry = signal-bar close; stop = k_s x ATR, target = k_t x ATR, plus a
+    time exit. Conservative fills: if a single bar spans BOTH stop and target,
+    the STOP is assumed hit first (matches the live ledger convention). Returns
+    the event augmented with outcome / R-multiple / net %.
+    """
+    if e["side"] not in ("long", "short"):
+        return e
+    A = arrs[e["ticker"]]
+    t = e["t"]
+    entry = A["close"][t]
+    atr = A["atr"][t]
+    if not atr or atr <= 0 or not entry:
+        return e
+    ks, kt, tmax = _template_for(e["signal"], e["side"], market)
+    long = e["side"] == "long"
+    stop = entry - ks * atr if long else entry + ks * atr
+    tgt = entry + kt * atr if long else entry - kt * atr
+    risk = ks * atr
+    n = len(A["close"])
+    outcome, exit_px, bars = "time", None, 0
+    for i in range(t + 1, min(t + 1 + tmax, n)):
+        hi, lo = A["high"][i], A["low"][i]
+        bars = i - t
+        hit_stop = (lo <= stop) if long else (hi >= stop)
+        hit_tgt = (hi >= tgt) if long else (lo <= tgt)
+        if hit_stop:                       # stop wins a both-touched bar
+            outcome, exit_px = "stop", stop
+            break
+        if hit_tgt:
+            outcome, exit_px = "target", tgt
+            break
+    if exit_px is None:                    # timed out
+        idx = min(t + tmax, n - 1)
+        exit_px, bars = A["close"][idx], idx - t
+    pnl = (exit_px - entry) if long else (entry - exit_px)
+    e["oco_outcome"] = outcome
+    e["oco_r"] = round(pnl / risk, 3) if risk else None
+    e["oco_pct"] = round(pnl / entry * 100, 3)
+    e["oco_bars"] = bars
+    return e
+
+
+def _oco_stats(events):
+    """Aggregate realized OCO performance for a set of directional events."""
+    evs = [e for e in events if e.get("oco_r") is not None]
+    if not evs:
+        return None
+    rs = [e["oco_r"] for e in evs]
+    wins = [r for r in rs if r > 0]
+    n = len(evs)
+    oc = {o: sum(1 for e in evs if e["oco_outcome"] == o)
+          for o in ("target", "stop", "time")}
+    import statistics
+    exp_r = statistics.fmean(rs)
+    # per-trade expectancy in R already nets the R:R geometry; also give %.
+    return {"n": n, "win%": round(100 * len(wins) / n, 1),
+            "exp_R": round(exp_r, 3),
+            "exp_%": round(statistics.fmean(e["oco_pct"] for e in evs), 3),
+            "tgt/stop/time": f"{oc['target']}/{oc['stop']}/{oc['time']}",
+            "avg_bars": round(statistics.fmean(e["oco_bars"] for e in evs), 1)}
+
+
 def _rs_table(bundle, bench_daily):
     closes = pd.DataFrame({t: d["close"] for t, (d, _) in bundle.items()})
     r = closes / closes.shift(CFG.rs_window) - 1
@@ -482,6 +558,13 @@ def run_backtest(bundle, market="us", bench_daily=None, horizons=(1, 3, 5, 10),
         _fwd(e, arrs, horizons, max_h)
     _vol_proxy(bundle, events)
 
+    # OCO exit-policy simulation: replay each directional event as the actual
+    # stop/target/time bracket the app prints, so we measure realized P&L of the
+    # exit policy, not just where price wandered (MAE/MFE).
+    for e in events:
+        if e["side"] in ("long", "short"):
+            _simulate_oco(e, arrs, market)
+
     # baseline: random (ticker, t) from the same universe/date-range
     rng = random.Random(seed)
     tks = [t for t in bundle if t in arrs]
@@ -561,6 +644,26 @@ def run_backtest(bundle, market="us", bench_daily=None, horizons=(1, 3, 5, 10),
                      f"(price stayed inside the range for {max_h}d)\n"
                      f"- abs {max_h}d move: S3 {mv.get('mean')}% vs baseline {bmv.get('mean')}% "
                      f"(lower = better for premium selling)\n")
+
+    # OCO exit-policy realized performance (the test MAE/MFE never gave us)
+    lines.append("## OCO exit-policy simulation (realized)")
+    lines.append("> Each directional event replayed as the printed bracket: "
+                 "stop k_s x ATR / target k_t x ATR / time exit, entry at signal "
+                 "close, stop wins a both-touched bar. exp_R = mean R-multiple "
+                 "per trade (nets the R:R geometry); positive = the template makes "
+                 "money on this cohort. Same survivor/clustering caveats apply.")
+    lines.append("| rule | n | win% | exp_R | exp_% | tgt/stop/time | avg_bars |")
+    lines.append("|---|---|---|---|---|---|---|")
+    for code in sorted({e["signal"] for e in dir_ev}):
+        st = _oco_stats([e for e in dir_ev if e["signal"] == code])
+        if st:
+            lines.append(f"| {code} | {st['n']} | {st['win%']} | {st['exp_R']} | "
+                         f"{st['exp_%']} | {st['tgt/stop/time']} | {st['avg_bars']} |")
+    allst = _oco_stats(dir_ev)
+    if allst:
+        lines.append(f"| ALL | {allst['n']} | {allst['win%']} | {allst['exp_R']} | "
+                     f"{allst['exp_%']} | {allst['tgt/stop/time']} | {allst['avg_bars']} |")
+    lines.append("")
 
     # MAE/MFE for stop placement
     codes = (tuple(sorted({e["signal"] for e in dir_ev})) if use_candidates

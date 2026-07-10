@@ -681,6 +681,41 @@ def main():
     check("live NOT ok when TWS unavailable (fail-loud precondition)",
           lhealth["ok"] is False)
 
+    print("OCO exit-policy simulator")
+    from .backtest import _simulate_oco, _oco_stats, _template_for
+    check("US S4 template = 2.0/1.5/5", _template_for("S4", "long", "us") == (2.0, 1.5, 5))
+    check("ASX S4 template = position 3.5/4.5/63",
+          _template_for("S4", "long", "asx") == (3.5, 4.5, 63))
+    check("India S2-long template = position 3.5/4.5/63",
+          _template_for("S2", "long", "in") == (3.5, 4.5, 63))
+
+    def oco_arr(n=310):
+        return {"close": np.full(n, 100.0), "high": np.full(n, 100.5),
+                "low": np.full(n, 99.5), "atr": np.full(n, 2.0)}
+    t = 300
+    A = oco_arr(); A["high"][t + 1] = 104.0; A["low"][t + 1] = 95.0
+    e = {"ticker": "X", "t": t, "side": "long", "signal": "S2"}
+    _simulate_oco(e, {"X": A}, "us")
+    check("OCO: stop wins a both-touched bar (long)",
+          e["oco_outcome"] == "stop" and e["oco_r"] == -1.0)
+    A2 = oco_arr(); A2["high"][t + 1] = 105.0; A2["low"][t + 1] = 96.0
+    e2 = {"ticker": "X", "t": t, "side": "short", "signal": "S2"}
+    _simulate_oco(e2, {"X": A2}, "us")
+    check("OCO: stop wins a both-touched bar (short)",
+          e2["oco_outcome"] == "stop" and e2["oco_r"] == -1.0)
+    A3 = oco_arr(); A3["high"][t + 3] = 103.5
+    e3 = {"ticker": "X", "t": t, "side": "long", "signal": "S2"}
+    _simulate_oco(e3, {"X": A3}, "us")
+    check("OCO: clean target = +0.75R (1.5/2.0 geometry)",
+          e3["oco_outcome"] == "target" and e3["oco_r"] == 0.75 and e3["oco_bars"] == 3)
+    A4 = oco_arr()   # nothing touched -> time exit at flat close
+    e4 = {"ticker": "X", "t": t, "side": "long", "signal": "S2"}
+    _simulate_oco(e4, {"X": A4}, "us")
+    check("OCO: untouched -> time exit", e4["oco_outcome"] == "time")
+    st = _oco_stats([e, e2, e3, e4])
+    check("OCO stats aggregate win%/exp_R",
+          st["n"] == 4 and "exp_R" in st and st["win%"] == 25.0)
+
     print("ledger robustness (atomic / corrupt / stale-drop)")
     from .ledger import _load as _lload, _save as _lsave, update_ledger as _upd
     with tempfile.TemporaryDirectory() as tdr:

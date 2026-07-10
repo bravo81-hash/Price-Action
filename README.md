@@ -220,6 +220,19 @@ and materially better:
   down-weighted; **evening_star retired** (negative expectancy in all three
   markets in the event study).
 
+## OCO exit-policy simulation
+
+Every directional event is now also replayed as the **actual bracket the app
+prints** - stop k_s x ATR, target k_t x ATR, time exit (per-market template:
+US S4 2.0/1.5/5, ASX S4 & India S2-long 3.5/4.5/63, else 2.0/1.5/10) - with
+entry at the signal close and the stop assumed first on a both-touched bar.
+The report's **OCO exit-policy (realized)** table gives per-rule n, win%,
+**exp_R** (mean R-multiple; positive = the template nets money on this
+cohort), exp_%, the target/stop/time outcome split, and average bars held.
+This tests the exit POLICY, which the MAE/MFE distributions never did -
+MAE/MFE showed where price wandered, not whether a 0.75-R:R bracket profits
+after the stop-first convention. Same current-cohort/clustering caveats apply.
+
 ## Backtest (event study)
 
 `python -m pa_scanner.backtest --market us|asx|in` replays the scanner over
