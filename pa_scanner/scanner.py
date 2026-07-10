@@ -428,20 +428,29 @@ def live_status(row, live_price, atr):
     return ("", None)
 
 
-def add_live_directional(rows):
+def add_live_directional(rows, market="asx"):
     """Real-time last-hour refresh for directional markets (ASX): TWS price
-    snapshots + live trigger status, no vol/options work. Falls back silently
-    if TWS is unavailable (live columns stay blank)."""
+    snapshots + live trigger status, no vol/options work.
+
+    Returns (rows, health) where health = {"connected", "fresh", "total",
+    "ok"}. 'ok' is True only when TWS connected AND fresh real-time quotes
+    reached at least CFG.live_min_fresh_frac of the actionable rows - so the
+    caller (a command explicitly named --live) can FAIL LOUD rather than
+    silently serve delayed data. The connection uses the full TWS config and
+    the correct per-market contract spec.
+    """
     from .volproviders import TWSVolProvider
+    health = {"connected": False, "fresh": 0, "total": len(rows), "ok": False}
     try:
-        prov = TWSVolProvider(vix_backwardation=None)
+        prov = TWSVolProvider(host=CFG.tws_host, port=CFG.tws_port,
+                              client_id=CFG.tws_client_id, timeout=CFG.tws_timeout,
+                              vix_backwardation=None, market=market)
     except Exception as e:
-        print(f"[live] TWS unavailable ({e}); skipping real-time refresh")
-        return rows
+        print(f"[live] TWS connect FAILED ({e}); live columns unavailable")
+        return rows, health
+    health["connected"] = True
     n = 0
     try:
-        if not hasattr(prov, "snapshot"):
-            return rows
         cache = {}
         for r in rows:
             t = r["ticker"]
@@ -461,11 +470,15 @@ def add_live_directional(rows):
     finally:
         if hasattr(prov, "close"):
             prov.close()
-    print(f"[live] real-time prices on {n}/{len(rows)} signals")
-    return rows
+    health["fresh"] = n
+    frac = (n / len(rows)) if rows else 0.0
+    health["ok"] = health["connected"] and (not rows or frac >= CFG.live_min_fresh_frac)
+    print(f"[live] real-time prices on {n}/{len(rows)} signals "
+          f"({frac:.0%}; need {CFG.live_min_fresh_frac:.0%})")
+    return rows, health
 
 
-def add_regime(rows, bundle, iv_enrich=None, vix_backwardation=None, live=False):
+def add_regime(rows, bundle, iv_enrich=None, vix_backwardation=None, live=False, market="us"):
     """Annotate each hit row with direction read, vol-state, and suggested structure.
 
     Direction is price-only (computed for every hit). Vol-state uses the primary
@@ -475,7 +488,7 @@ def add_regime(rows, bundle, iv_enrich=None, vix_backwardation=None, live=False)
     """
     if iv_enrich is None:
         iv_enrich = CFG.iv_enrich_hits
-    primary, baseline = make_vol_provider(iv_enrich, vix_backwardation)
+    primary, baseline = make_vol_provider(iv_enrich, vix_backwardation, market=market)
     cap = getattr(primary, "enrich_cap", None)   # TWS: limit enriched hits (pacing)
     is_live = live and hasattr(primary, "snapshot")   # real-time prices available?
     dir_cache, vol_cache, live_cache, enriched = {}, {}, {}, set()

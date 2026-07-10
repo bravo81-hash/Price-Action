@@ -658,6 +658,29 @@ def main():
                      bench={"symbol":"SPY","bias":"bearish","adx":26,"board":bb})).read()
         check("report embeds board JSON", '"tier"' in hb and "PRIME" in hb)
 
+    print("IBKR contract spec + live fail-loud")
+    from .config import contract_spec
+    sp_us = contract_spec("AAPL", "us")
+    check("US contract -> SMART/USD, bare symbol",
+          sp_us == {"symbol": "AAPL", "exchange": "SMART", "currency": "USD"})
+    sp_asx = contract_spec("CBA.AX", "asx")
+    check("ASX contract strips .AX -> ASX/AUD",
+          sp_asx == {"symbol": "CBA", "exchange": "ASX", "currency": "AUD"})
+    sp_in = contract_spec("RELIANCE.NS", "in")
+    check("India contract strips .NS -> NSE/INR",
+          sp_in == {"symbol": "RELIANCE", "exchange": "NSE", "currency": "INR"})
+    check("contract spec leaves already-bare symbol intact",
+          contract_spec("BHP", "asx")["symbol"] == "BHP")
+
+    # live fail-loud: with no TWS in the sandbox, health.ok must be False
+    from .scanner import add_live_directional
+    lrows = [{"ticker": "CBA.AX", "signal": "S4", "side": "long", "last": 100.0, "atr": 2.0}]
+    _lr, lhealth = add_live_directional(lrows, market="asx")
+    check("live health returns a dict with ok flag",
+          isinstance(lhealth, dict) and "ok" in lhealth and "connected" in lhealth)
+    check("live NOT ok when TWS unavailable (fail-loud precondition)",
+          lhealth["ok"] is False)
+
     print("STFS-EQ imports: snapshot / qty / drift report")
     from .snapshot import build_snapshot
 

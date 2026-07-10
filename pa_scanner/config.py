@@ -97,6 +97,7 @@ class Config:
     tws_market_data_type: int = 2    # 1 live | 2 frozen | 3 delayed | 4 delayed-frozen
     tws_greek_wait: float = 2.0      # seconds to let model greeks populate per contract
     tws_snapshot_wait: float = 1.5   # seconds to let a real-time price snapshot populate
+    live_min_fresh_frac: float = 0.6  # --live fails loud unless >= this frac of rows got fresh quotes
 
     # --- option-chain liquidity check (US/TWS path, on hits) ---
     # Harvested from the same ATM call+put the vol provider already prices on the
@@ -152,15 +153,29 @@ CFG = Config()
 MARKETS = {
     "us":  {"mode": "options",     "suffix": "",    "ccy": "USD", "label": "US",
             "tv": "",    "min_price": 10.0, "min_dollar_vol": 20_000_000.0,
-            "bench": "SPY"},
+            "bench": "SPY",   "ib_exchange": "SMART"},
     "asx": {"mode": "directional", "suffix": ".AX", "ccy": "AUD", "label": "ASX",
             "tv": "ASX", "min_price": 0.20, "min_dollar_vol": 0.0,
-            "bench": "^AXJO"},
+            "bench": "^AXJO", "ib_exchange": "ASX"},
     "in":  {"mode": "directional", "suffix": ".NS", "ccy": "INR", "label": "India",
             "tv": "NSE", "min_price": 5.0,  "min_dollar_vol": 0.0,
-            "bench": "^NSEI"},
+            "bench": "^NSEI", "ib_exchange": "NSE"},
 }
 
 
 def market(name="us"):
     return MARKETS[name]
+
+
+def contract_spec(yf_ticker, market_key="us"):
+    """Map a yfinance ticker to IBKR (symbol, exchange, currency).
+
+    yfinance suffixes (.AX/.NS) are not IBKR symbols; IBKR wants the bare
+    local symbol plus a market-specific exchange and currency. US routes
+    through SMART/USD; ASX -> ASX/AUD; NSE -> NSE/INR. Returns a dict so the
+    caller can build Stock(**spec) without hard-coding SMART/USD.
+    """
+    mkt = MARKETS.get(market_key, MARKETS["us"])
+    suffix = mkt["suffix"]
+    sym = yf_ticker[:-len(suffix)] if suffix and yf_ticker.endswith(suffix) else yf_ticker
+    return {"symbol": sym, "exchange": mkt["ib_exchange"], "currency": mkt["ccy"]}

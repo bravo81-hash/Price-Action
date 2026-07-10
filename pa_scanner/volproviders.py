@@ -12,7 +12,7 @@ import math
 
 import numpy as np
 
-from .config import CFG
+from .config import CFG, contract_spec
 from . import indicators as ind
 from .regime import VolInputs
 
@@ -121,12 +121,13 @@ class TWSVolProvider:
     enrich_cap = None  # set per-instance from CFG.tws_max_enrich
 
     def __init__(self, host="127.0.0.1", port=7496, client_id=0,
-                 timeout=8.0, vix_backwardation=None):
+                 timeout=8.0, vix_backwardation=None, market="us"):
         import logging
         import random
         from ib_async import IB
         logging.getLogger("ib_async").setLevel(logging.CRITICAL)  # quiet routine API errors
         self.vix_bw = vix_backwardation
+        self.market = market
         self.enrich_cap = CFG.tws_max_enrich
         self._greek_wait = CFG.tws_greek_wait
         self.client_id = client_id or random.randint(10_000, 9_999_999)  # dynamic
@@ -150,7 +151,9 @@ class TWSVolProvider:
             return x if (x is not None and not (isinstance(x, float) and math.isnan(x))) else None
 
         try:
-            q = self.ib.qualifyContracts(Stock(ticker, "SMART", "USD"))
+            spec = contract_spec(ticker, self.market)
+            q = self.ib.qualifyContracts(
+                Stock(spec["symbol"], spec["exchange"], spec["currency"]))
             if not q:
                 return None
             tk = self.ib.reqMktData(q[0], "", True, False)  # snapshot
@@ -239,7 +242,9 @@ class TWSVolProvider:
         rv, rank = _rv_and_rank(daily)
         fallback = VolInputs(rv=rv, rv_rank=rank, backwardation=self.vix_bw, source="rv")
         try:
-            q = self.ib.qualifyContracts(Stock(ticker, "SMART", "USD"))
+            spec = contract_spec(ticker, self.market)
+            q = self.ib.qualifyContracts(
+                Stock(spec["symbol"], spec["exchange"], spec["currency"]))
             if not q:
                 return fallback
             stk = q[0]
@@ -270,7 +275,7 @@ class TWSVolProvider:
             return fallback
 
 
-def make_vol_provider(iv_enrich=True, vix_backwardation=None):
+def make_vol_provider(iv_enrich=True, vix_backwardation=None, market="us"):
     """Return (primary_or_None, baseline). Caller tries primary, falls back to baseline.
     With vol_source='tws' the primary is a live IBKR connection; if the connect
     fails (TWS not running, API off) it degrades to the yfinance approximation."""
@@ -278,7 +283,7 @@ def make_vol_provider(iv_enrich=True, vix_backwardation=None):
         try:
             tws = TWSVolProvider(host=CFG.tws_host, port=CFG.tws_port,
                                  client_id=CFG.tws_client_id, timeout=CFG.tws_timeout,
-                                 vix_backwardation=vix_backwardation)
+                                 vix_backwardation=vix_backwardation, market=market)
             print(f"[regime] TWS connected at {CFG.tws_host}:{CFG.tws_port} "
                   f"(clientId {tws.client_id}); enriching top {tws.enrich_cap} hits")
             return tws, RealizedVolProvider(vix_backwardation)

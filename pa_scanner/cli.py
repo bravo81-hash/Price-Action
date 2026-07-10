@@ -8,6 +8,7 @@ Examples:
   python -m pa_scanner.cli --tickers AAPL MSFT NVDA SPY
 """
 import argparse
+import sys
 
 from .config import CFG, MARKETS
 from . import universe as uni
@@ -127,15 +128,16 @@ def main():
     if directional:
         print(f"[scan] {len(rows)} signals; assigning long-only actions...")
         add_action(rows, bundle)
+        live_health = None
         if live_directional:
             print(f"[scan] {len(rows)} signals; real-time TWS refresh...")
-            add_live_directional(rows)
+            _, live_health = add_live_directional(rows, market=a.market)
     else:
         print(f"[scan] {len(rows)} signals; classifying regime"
               + (" + IV enrichment" if (CFG.iv_enrich_hits and not a.no_iv) else "") + "...")
         vix_bw = fetch_vix_backwardation()
         add_regime(rows, bundle, iv_enrich=(CFG.iv_enrich_hits and not a.no_iv),
-                   vix_backwardation=vix_bw, live=live)
+                   vix_backwardation=vix_bw, live=live, market=a.market)
         if CFG.earnings_enrich and not a.no_earnings:
             annotate_earnings(rows)
 
@@ -162,6 +164,17 @@ def main():
         write_report(rows, out, scanned=len(bundle), universe=len(syms),
                      market=a.market, bench=binfo)
         print(f"[scan] HTML report -> {out}")
+
+    # --live must FAIL LOUD: a command named "live" should not silently serve
+    # delayed data. Directional live reports health; exit nonzero if not ok.
+    if live_directional and rows:
+        if live_health is None or not live_health.get("ok"):
+            reason = ("TWS not connected" if not (live_health or {}).get("connected")
+                      else f"only {(live_health or {}).get('fresh', 0)}/"
+                           f"{(live_health or {}).get('total', 0)} rows got fresh quotes")
+            print(f"[live] FAIL: real-time data incomplete ({reason}). "
+                  f"Is TWS running, logged in, and entitled for {a.market.upper()}?")
+            sys.exit(2)
 
 
 if __name__ == "__main__":
