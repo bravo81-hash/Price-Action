@@ -31,7 +31,19 @@ if errorlevel 1 (
 git add docs/data
 git commit -m "scan US+ASX %date%" >nul 2>&1
 git pull --rebase -X theirs --no-edit
+if errorlevel 1 (
+    echo.
+    echo WARNING: git pull/rebase FAILED - dashboard NOT published. Resolve manually.
+    pause
+    exit /b 1
+)
 git push
+if errorlevel 1 (
+    echo.
+    echo WARNING: git push FAILED - dashboard NOT published. Check network/credentials.
+    pause
+    exit /b 1
+)
 
 echo.
 echo Done. Dashboard updates in ~1 min:

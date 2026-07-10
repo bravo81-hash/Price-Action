@@ -8,6 +8,6 @@ echo "=== ASX (long-only, TWS) ==="
 python3 -m pa_scanner.cli --market asx --web docs --tws || { read -n1 -r -p "ASX failed. Key..."; exit 1; }
 git add docs/data
 git commit -m "scan US+ASX $(date +%F)" >/dev/null 2>&1
-git pull --rebase -X theirs --no-edit
-git push
+git pull --rebase -X theirs --no-edit || { echo "WARNING: git pull/rebase FAILED - dashboard NOT published."; read -n1 -r -p "Key..."; exit 1; }
+git push || { echo "WARNING: git push FAILED - dashboard NOT published."; read -n1 -r -p "Key..."; exit 1; }
 open pa_report.html pa_report_asx.html 2>/dev/null || true

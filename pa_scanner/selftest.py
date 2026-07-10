@@ -681,6 +681,37 @@ def main():
     check("live NOT ok when TWS unavailable (fail-loud precondition)",
           lhealth["ok"] is False)
 
+    print("ledger robustness (atomic / corrupt / stale-drop)")
+    from .ledger import _load as _lload, _save as _lsave, update_ledger as _upd
+    with tempfile.TemporaryDirectory() as tdr:
+        _lsave(tdr, "us", [{"ticker": "A"}], [{"ticker": "B", "side": "long",
+               "ret_pct": 2.0, "outcome": "target"}])
+        o, r = _lload(tdr, "us")
+        check("ledger round-trips through atomic save", len(o) == 1 and len(r) == 1)
+        check("atomic save leaves no .tmp file",
+              not os.path.exists(os.path.join(tdr, "data", "ledger_us.json.tmp")))
+        # corrupt the file -> load must preserve it, not silently reset+overwrite
+        badp = os.path.join(tdr, "data", "ledger_us.json")
+        open(badp, "w").write("{ this is not json ")
+        o2, r2 = _lload(tdr, "us")
+        check("corrupt ledger returns empty state", o2 == [] and r2 == [])
+        check("corrupt ledger preserved as .corrupt (history not lost)",
+              os.path.exists(badp + ".corrupt"))
+        # stale-drop: an open whose ticker leaves the universe for >20 scans
+        # becomes a 'dropped' resolved entry, not a silent disappearance
+        stale = {"ticker": "GONE", "signal": "S4", "side": "long",
+                 "entry_date": "2026-01-01", "entry_px": 10.0, "stop": 9.0,
+                 "tgt": 11.0, "time_exit": 5, "stale": 20}
+        _lsave(tdr, "asx", [stale], [])
+        _upd([], {}, "asx", out_dir=tdr)   # empty bundle -> ticker missing
+        o3, r3 = _lload(tdr, "asx")
+        dropped = [e for e in r3 if e.get("outcome") == "dropped"]
+        check("stale open recorded as dropped, not vanished",
+              len(o3) == 0 and len(dropped) == 1 and dropped[0]["ret_pct"] is None)
+        from .ledger import _stats2
+        check("dropped entries excluded from expectancy stats",
+              _stats2(r3) is None)
+
     print("S3-aware earnings status")
     from .earnings import _ern_status
     check("S3 earnings inside 60d tenor -> inside",

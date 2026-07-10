@@ -40,19 +40,34 @@ def _load(out_dir, market):
             with open(p, encoding="utf-8") as f:
                 d = json.load(f)
             return d.get("open", []), d.get("resolved", [])
-        except Exception:
-            pass
+        except Exception as e:
+            # Do NOT silently reset to empty and let the next _save overwrite a
+            # corrupt-but-recoverable history. Preserve the bad file for repair.
+            bad = p + ".corrupt"
+            try:
+                os.replace(p, bad)
+                print(f"[ledger] WARNING: {os.path.basename(p)} unreadable ({e}); "
+                      f"preserved as {os.path.basename(bad)} - starting fresh state")
+            except Exception:
+                print(f"[ledger] WARNING: {os.path.basename(p)} unreadable ({e})")
     return [], []
 
 
 def _save(out_dir, market, open_e, resolved):
     os.makedirs(os.path.join(out_dir, "data"), exist_ok=True)
     resolved = resolved[-CFG.ledger_keep_resolved:]
-    with open(_path(out_dir, market), "w", encoding="utf-8") as f:
-        json.dump({"updated": dt.datetime.now(dt.timezone.utc)
-                   .strftime("%Y-%m-%dT%H:%M:%SZ"),
-                   "open": open_e, "resolved": resolved},
-                  f, separators=(",", ":"))
+    path = _path(out_dir, market)
+    payload = {"updated": dt.datetime.now(dt.timezone.utc)
+               .strftime("%Y-%m-%dT%H:%M:%SZ"),
+               "open": open_e, "resolved": resolved}
+    # atomic: write to a temp file in the same dir, fsync, then os.replace so a
+    # crash mid-write can never truncate the canonical ledger.
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(payload, f, separators=(",", ":"))
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
 
 
 def _signed_ret(side, entry, exit_px):
@@ -103,13 +118,23 @@ def update_ledger(rows, bundle, market, out_dir="docs"):
     """Resolve prior opens against fresh data, then append today's hits."""
     open_e, resolved = _load(out_dir, market)
 
-    still_open, n_res = [], 0
+    still_open, n_res, n_drop = [], 0, 0
     for e in open_e:
         d = bundle.get(e["ticker"], (None,))[0]
         if d is None or len(d) == 0:
             e["stale"] = e.get("stale", 0) + 1
             if e["stale"] <= 20:          # ticker fell out of the scan; retry
                 still_open.append(e)
+            else:
+                # do NOT let it silently vanish - record it as a dropped outcome
+                # so expectancy isn't quietly improved by disappearing positions.
+                out = dict(e)
+                out.update({"outcome": "dropped", "exit_px": None,
+                            "exit_date": str(dt.date.today()), "bars_held": None,
+                            "ret_pct": None,
+                            "note": "left the scan universe for >20 scans"})
+                resolved.append(out)
+                n_drop += 1
             continue
         r = _resolve_entry(e, d)
         if r is None:
@@ -144,13 +169,15 @@ def update_ledger(rows, bundle, market, out_dir="docs"):
 
     _save(out_dir, market, still_open, resolved)
     print(f"[ledger] {market}: +{n_new} opened, {n_res} resolved, "
+          f"{n_drop} dropped(left universe), "
           f"{len(still_open)} open, {len(resolved)} resolved on file")
     return still_open, resolved
 
 
 def _stats2(entries):
     """Richer directional stats: win%, avg win/loss, payoff, expectancy/trade."""
-    dirs = [e for e in entries if e["side"] in ("long", "short")]
+    dirs = [e for e in entries if e["side"] in ("long", "short")
+            and e.get("ret_pct") is not None]
     if not dirs:
         return None
     rets = [e["ret_pct"] for e in dirs]
@@ -166,7 +193,8 @@ def _stats2(entries):
 
 
 def _stats(entries):
-    dirs = [e for e in entries if e["side"] in ("long", "short")]
+    dirs = [e for e in entries if e["side"] in ("long", "short")
+            and e.get("ret_pct") is not None]
     out = {"n": len(dirs)}
     if dirs:
         rets = [e["ret_pct"] for e in dirs]
