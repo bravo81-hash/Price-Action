@@ -10,7 +10,7 @@ Tiers (high -> low): PRIME, PREFERRED, CONTEXT, CAUTION, AVOID.
 from collections import Counter
 
 TIERS = {
-    "PRIME":     (0, "#f0c000", "must-consider"),
+    "PRIME":     (0, "#f0c000", "top attention/ordering - NOT a sizing signal"),
     "PREFERRED": (1, "#3fb950", "favoured"),
     "CONTEXT":   (2, "#8b949e", "ideas only, no measured entry edge"),
     "CAUTION":   (3, "#d29922", "usable with a caveat"),
@@ -27,7 +27,7 @@ def _assess(code, market, bearish):
         if market in ("us", "asx") and bearish:
             m = "US +5.6%" if market == "us" else "ASX +4.1%"
             t = "t=9.4" if market == "us" else "t=7.0"
-            return ("PRIME", f"bench bearish supercharges mean reversion ({m} excess @63d, {t})", None)
+            return ("PRIME", f"bench bearish favours mean reversion ({m} excess @63d, {t}; regime-unmatched/clustered - order not size)", None)
         if market == "in":
             return ("PREFERRED", "validated snapback; PRIME n/a in India (cell untested)", None)
         base = "5d t=3.4; ASX position, excess grows with horizon" if market == "asx" else "5d t=3.4, both triggers"
@@ -35,7 +35,7 @@ def _assess(code, market, bearish):
 
     if code == "S3":
         if market == "us":
-            return ("PREFERRED", "quiet-name selection for premium selling; prefer rich-vol rows", None)
+            return ("PREFERRED", "quiet-name SELECTION screen (option expectancy untested); prefer high realized-vol rows", None)
         return ("CONTEXT", "range = no directional edge here; stand aside on these names", None)
 
     if code == "S1":

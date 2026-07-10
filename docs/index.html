@@ -119,7 +119,7 @@ markets. Full per-slice tables live in <code>backtest/report_&lt;mkt&gt;.md</cod
 <ul>
 <li><span class="neu">S1/S2 directional entries: no aggregate alpha</span> after drift correction (all rule×side |t|&lt;1.6 at 10d).</li>
 <li><span class="neg">Do not extend directional holds past ~21 days</span> — excess turns significantly negative at 42–63d (S2 t=−4.6 to −5.4; longs alone −1.4%, t=−2.9). Part is vol/beta composition (signals cluster in high-ATR names), but the conclusion holds.</li>
-<li><span class="pos">S3 quiet-name selection persists to 63d</span> (11.3% vs 12.7% baseline abs move) — validates 30–60 DTE premium-selling tenors.</li>
+<li><span class="pos">S3 quiet-name selection persists to 63d</span> (11.3% vs 12.7% baseline abs move). This is a <b>quietness-persistence screen</b>, not a validated option edge: the harness shows the underlying stays quiet, not that any condor/calendar is profitable. 30–60 DTE is a reasonable tenor to pair with it; option expectancy (spreads, fills, assignment) is untested here.</li>
 <li><span class="neg">Bench-bearish stand-down is real and strengthens with horizon</span>: −0.63% excess at 10d (t=−4.0) → −2.45% at 63d (t=−4.5). Dashboard shows a STAND-DOWN banner in this state.</li>
 <li><span class="neg">evening_star retired</span> as an S1 trigger — worst-of-side pattern in every market (US t=−6.0).</li>
 <li>Score deciles are flat over 5y — score/rank are list organizers, not predictive.</li>
@@ -145,7 +145,7 @@ markets. Full per-slice tables live in <code>backtest/report_&lt;mkt&gt;.md</cod
 <li><span class="neu">PBEMA near-miss</span> (US 63d t=2.33, ASX 1.65 — below bar): parked in candidates.py for a future out-of-sample re-test.</li>
 <li><span class="neg">NH52, HVOL, GAPD failed</span>; candidate shorts were harmful everywhere (US all-shorts t=−3.9) — no short setups added.</li>
 <li>RS≥70 conditioning replicated in both markets (t=2.26 / 1.96), reinforcing the RS layer.</li>
-<li><b>Round 2 (OSMR family)</b>: STRK4 (4+ down closes) cleared the bar (US 5d t=3.17, ASX t=2.73 + ASX 21–63d persistence) and was folded into S4 as a second trigger. OSMR2 settled the parameter test — RSI(2) lost to RSI(3) in the US, so S4 keeps RSI(3)&lt;15. LO7/BBMR/IBSMR failed. Replicated regime findings: bench-bearish supercharges MR (US +5.57% @63d t=9.37, ASX +4.09% t=6.96 → S4 exempt from stand-down and the counter-index penalty); ASX MR excess grows with horizon (→ ASX S4 position template); rich vol preferred (t=2.86/5.65).</li>
+<li><b>Round 2 (OSMR family)</b>: STRK4 (4+ down closes) cleared the bar (US 5d t=3.17, ASX t=2.73 + ASX 21–63d persistence) and was folded into S4 as a second trigger. OSMR2 settled the parameter test — RSI(2) lost to RSI(3) in the US, so S4 keeps RSI(3)&lt;15. LO7/BBMR/IBSMR failed. Replicated regime findings: bench-bearish supercharges MR (US +5.57% @63d t=9.37, ASX +4.09% t=6.96 → S4 exempt from stand-down and the counter-index penalty); ASX MR excess grows with horizon (→ ASX S4 position template); high <b>realized</b>-vol names snapped hardest (t=2.86/5.65) — this is realized-vol rank, not implied vol / IVR.</li>
 </ul></div>
 
 <div class="card"><b>Kept vs. changed</b> (round-1 and round-2 decisions from the 2y and 5y runs):
@@ -198,7 +198,7 @@ the free yfinance path). Vol state (cheap/fair/rich) adjusts the S3 score.</li>
 validated risk signal (−0.63% to −2.45% excess depending on horizon) — reduce size or stand
 aside while it's showing.</li>
 <li><b>Hold window:</b> keep directional theses inside ~10–21 days per the backtest. For
-30–60 DTE premium selling, lean on S3 + rich vol, not directional S1/S2.</li>
+30–60 DTE premium selling, lean on the S3 quietness screen + high realized-vol names, not directional S1/S2.</li>
 </ul>
 
 <h2>ASX / India tabs — long-only directional</h2>
@@ -265,7 +265,7 @@ target 1.5×ATR, 10-bar time exit.</li>
 <div class="card"><b class="mkt">S3 — Range / chop</b> (neutral · US = premium selling; <span class="pos">quiet-name selection validated in all markets</span>)
 <ul>
 <li><b>Setup:</b> ADX &lt; 20, daily EMA20/50 flat (≤1.5% apart), range width 4–25% of price, price mid-range (30–70% position), not coiling (≤1 of the last 3 closes at a range edge), ≥ oscillation across the mid.</li>
-<li><b>Trade (US):</b> short premium — condor/calendar with short strikes referenced to the range edges (row <b>Stop</b> = range low, <b>Tgt</b> = range high). Prefer <b>rich</b> vol state and OK <b>Opt Liq</b>; 30–60 DTE tenors are supported by the data (quietness persists to 63d). Skip if earnings fall inside the tenor.</li>
+<li><b>Trade (US):</b> the validated part is <b>name selection</b> (these stay quiet); structure is your call. If selling premium, the range edges are <b>chart references</b> for strike placement, not backtested strikes (row <b>Stop</b>/<b>Tgt</b> show range low/high). Prefer high realized-vol + OK <b>Opt Liq</b>; 30–60 DTE pairs with the persistence but option P&L is untested. Skip if earnings fall inside the tenor (Ern safe filter).</li>
 <li><b>Exit / manage:</b> exit or adjust on a daily close through either range edge ("broke"); otherwise manage to your premium plan and review at ~10 bars.</li>
 </ul></div>
 
@@ -276,7 +276,7 @@ target 1.5×ATR, 10-bar time exit.</li>
 <li><b>US:</b> SL 2.0×ATR · PT 1.5×ATR · time exit <b>5 bars</b> — the edge is 3–10 days; do not linger.</li>
 <li><b>ASX:</b> position template — SL 3.5×ATR · PT 4.5×ATR · time exit <b>63 bars</b> (excess grows with horizon there).</li>
 <li><b>India:</b> standard 2.0×ATR / 1.5×ATR / <b>5-bar</b> time exit (same as US — only ASX gets the position template for S4).</li>
-<li><b>S4★ PRIME:</b> bench regime bearish → highest-conviction state (+5.6% US / +4.1% ASX excess @63d). Trade S4 normally (or up-size within plan) while the trend book stands down. Prefer higher-ATR% names — volatile names snap hardest (replicated).</li>
+<li><b>S4★ PRIME:</b> bench regime bearish → highest-conviction state (+5.6% US / +4.1% ASX excess @63d). Trade S4 normally (or up-size within plan) while the trend book stands down. <b>Do not upsize on PRIME</b>: the +5.6% figure is regime-unmatched and clustered (one selloff = many correlated rows), so treat PRIME as ordering/attention, not a sizing signal. Prefer higher realized-vol names — they snapped hardest (replicated).</li>
 <li><b>Never short</b> this or any setup here — candidate shorts were harmful in every market.</li>
 </ul></div>
 

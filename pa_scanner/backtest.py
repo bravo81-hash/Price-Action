@@ -504,7 +504,11 @@ def run_backtest(bundle, market="us", bench_daily=None, horizons=(1, 3, 5, 10),
     tag = "Backtest CANDIDATES" if use_candidates else "Backtest"
     lines = [f"# {tag} — {MARKETS[market]['label']}  ({dt.date.today()})",
              f"events {len(events)} · baseline {len(base)} · horizons {list(horizons)} "
-             f"· cooldown {cooldown} · vol-state = rv-proxy · baselines side-matched", ""]
+             f"· cooldown {cooldown} · vol-state = rv-proxy · baselines side-matched",
+             "> CURRENT-COHORT event study: today's constituents replayed backward "
+             "(survivor-biased); baselines are side-matched but NOT date/sector/beta "
+             "matched, and t-stats treat clustered same-day hits as independent. "
+             "Treat as discovery evidence, not out-of-sample validation.", ""]
 
     def table(title, groups, horizon=hz, directional_only=False):
         lines.append(f"## {title}")

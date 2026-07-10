@@ -142,7 +142,13 @@ single-market `run_scan.bat` / `run_scan_asx.bat` / `run_scan_india.bat`
 last-hour path (S2 triggered/pending, S4 reclaimed/below-MA, S1 at-level);
 India is EOD-only (separate broker).
 
-## Validated edges (5y event study, side-matched baselines)
+## Findings (5y CURRENT-COHORT event study, side-matched baselines)
+
+> Caveat: this is a current-cohort study (survivor-biased), baselines are
+> side-matched but not date/sector/beta matched, and the same 5y window was
+> used for discovery and confirmation. Findings below are strong *hypotheses*
+> pending out-of-sample confirmation (the forward ledger accrues that). Do not
+> read "validated" as "out-of-sample proven".
 
 Honest positioning after 59k backtested events across all three markets:
 
@@ -172,7 +178,7 @@ Honest positioning after 59k backtested events across all three markets:
   t=-2.9). Part is vol/beta composition (signals cluster in high-ATR names),
   but the conclusion stands. The bench-bearish stand-down strengthens with
   horizon (-2.45% @63d, t=-4.5). S3 quiet-name selection persists to 63d
-  (11.3% vs 12.7% baseline abs move) - validating 30-60 DTE premium tenors.
+  (11.3% vs 12.7% baseline abs move). Quietness-persistence SCREEN, not a validated option edge - the harness shows the underlying stays quiet, not that a condor/calendar is profitable. 30-60 DTE is a sensible pairing; option expectancy is untested.
 - **India: S2 BUYs are 6-13 week position trades** (+0.95-1.14% excess at
   42-63d, t~1.8-2.3, favorable MAE/MFE skew). These rows carry the POSITION
   exit template: stop 3.5xATR / target 4.5xATR / 63-bar time exit
@@ -198,7 +204,7 @@ and materially better:
   extension. The breakout bar must at least match prior-20 average volume
   (self-dilution in the volume baseline also fixed).
 - **S3 stability** — ranges whose recent closes press a boundary are coiling,
-  not chopping, and are rejected; on the US tab, rich-vol chop ranks above
+  not chopping, and are rejected; on the US tab, high realized-vol chop ranks above
   cheap-vol chop.
 - **Relative strength (RS)** — 63-day return vs the market benchmark
   (SPY / ^AXJO / ^NSEI), shown as a universe percentile. Strong RS lifts longs;

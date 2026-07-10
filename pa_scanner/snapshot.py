@@ -14,11 +14,15 @@ from __future__ import annotations
 
 
 STATES = {
-    "RISK_OFF":             ("manage only (S4 exempt)", 0.0),
-    "RISK_ON_EXTENDED":     ("pullback entries only, half size", 0.5),
-    "RISK_ON_CONTINUATION": ("full size", 1.0),
-    "PULLBACK_BUYABLE":     ("top-grade only, half size", 0.5),
-    "CHOP_NO_EDGE":         ("quarter size or skip", 0.25),
+    # Descriptive context only. These are heuristic reads, NOT validated
+    # sizing multipliers - the old full/half/quarter language implied a
+    # position-sizing edge the backtest never established. size_mod is kept
+    # for internal ordering but is not a risk instruction.
+    "RISK_OFF":             ("risk-off tape - trend entries stand down (S4 exempt)", 0.0),
+    "RISK_ON_EXTENDED":     ("uptrend but short-term extended - pullbacks cleaner", 0.5),
+    "RISK_ON_CONTINUATION": ("constructive continuation tape", 1.0),
+    "PULLBACK_BUYABLE":     ("pullback without risk-off confirmation", 0.5),
+    "CHOP_NO_EDGE":         ("no strong directional market edge", 0.25),
     "UNKNOWN":              ("insufficient data", 0.0),
 }
 
