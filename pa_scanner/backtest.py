@@ -422,6 +422,130 @@ def _oco_stats(events):
             "avg_bars": round(statistics.fmean(e["oco_bars"] for e in evs), 1)}
 
 
+def prime_audit(bundle, market="us", bench_daily=None, horizon=63,
+                period=None, n_boot=2000, seed=17, out_dir="backtest"):
+    """Scoped audit of the S4-in-bench-bearish (PRIME) claim, correcting the two
+    criticisms that most inflate it:
+
+      1. DATE-MATCHED baseline. The raw '+5.57% @63d' compared S4-bearish hits
+         to an all-dates random pool, so part of it is just 'stocks bounce on
+         down days.' Here each S4-long hit on a bearish-bench date is compared
+         to the mean forward return of ALL longs available on that SAME date -
+         the excess is what S4 selection adds beyond 'be long that day'.
+
+      2. BLOCK BOOTSTRAP by date. t-stats treated 74 hits on one selloff as 74
+         independent bets. We resample whole DATES with replacement (each date
+         is one block, carrying all its hits) and rebuild the mean-excess
+         distribution, so the CI reflects the true number of independent days,
+         not hits.
+
+    Writes report_<mkt>_prime.md with the date-matched mean excess, a
+    bootstrap 95% CI and p-value, and the independent-day count.
+    """
+    import statistics
+    max_h = horizon
+    raw, arrs = [], {}
+    for tk, (d, wk) in bundle.items():
+        try:
+            ev, A = events_for_ticker(tk, d, wk, max_h)
+        except Exception:
+            continue
+        arrs[tk] = A
+        raw.extend(ev)
+    events = _dedup(raw, CFG.exit_time_bars)
+    bb = _bench_bias(bench_daily)
+    hz = f"ret{max_h}"
+    for e in events:
+        _fwd(e, arrs, (max_h,), max_h)
+        e["bench"] = (bb.asof(e["date"]) if bb is not None else None)
+
+    # per-date pool of ALL long forward returns (the date-matched benchmark)
+    by_date_long = {}
+    rng = random.Random(seed)
+    tks = list(arrs)
+    # sample a broad set of long forward returns per calendar date actually used
+    prime_dates = sorted({e["date"] for e in events
+                          if e["signal"] == "S4" and e["side"] == "long"
+                          and e["bench"] == "bearish"})
+    if not prime_dates:
+        _write_prime([f"# PRIME audit — {MARKETS[market]['label']}",
+                      "No S4-long hits on bench-bearish dates in this window."],
+                     market, out_dir)
+        return {"n_hits": 0}
+
+    # build the same-date long baseline mean for each prime date
+    date_base = {}
+    for dte in prime_dates:
+        pool = []
+        for tk in tks:
+            A = arrs[tk]
+            d = bundle[tk][0]
+            pos = d.index.get_indexer([dte])
+            if len(pos) and pos[0] >= 0:
+                t = pos[0]
+                if 0 <= t < len(A["close"]) - max_h:
+                    r = (A["close"][t + max_h] / A["close"][t] - 1) * 100
+                    pool.append(r)
+        if pool:
+            date_base[dte] = statistics.fmean(pool)
+
+    # per-hit excess vs its own date's long-pool mean, grouped by date (blocks)
+    blocks = {}
+    for e in events:
+        if (e["signal"] == "S4" and e["side"] == "long"
+                and e["bench"] == "bearish" and e.get(hz) is not None
+                and e["date"] in date_base):
+            blocks.setdefault(e["date"], []).append(e[hz] - date_base[e["date"]])
+
+    dates = list(blocks)
+    all_ex = [x for v in blocks.values() for x in v]
+    n_hits, n_days = len(all_ex), len(dates)
+    if n_hits == 0:
+        _write_prime([f"# PRIME audit — {MARKETS[market]['label']}",
+                      "No usable S4-long bearish hits with date-matched pool."],
+                     market, out_dir)
+        return {"n_hits": 0}
+    point = statistics.fmean(all_ex)
+
+    # block bootstrap: resample DATES (with replacement), mean of pooled excess
+    boot = []
+    for _ in range(n_boot):
+        pick = [rng.choice(dates) for _ in range(n_days)]
+        vals = [x for dte in pick for x in blocks[dte]]
+        boot.append(statistics.fmean(vals))
+    boot.sort()
+    lo = boot[int(0.025 * len(boot))]
+    hi = boot[int(0.975 * len(boot))]
+    p_le0 = sum(1 for b in boot if b <= 0) / len(boot)
+
+    lines = [f"# PRIME audit — {MARKETS[market]['label']}  ({dt.date.today()})",
+             f"S4-long on bench-bearish dates, horizon {max_h}d. "
+             f"Date-matched, side-matched baseline; block bootstrap by date.", "",
+             f"- hits: **{n_hits}** across **{n_days}** independent bearish dates",
+             f"- date-matched mean excess: **{point:.2f}%** "
+             f"(vs the all-longs-that-day baseline)",
+             f"- block-bootstrap 95% CI: **[{lo:.2f}%, {hi:.2f}%]**",
+             f"- bootstrap p(excess<=0): **{p_le0:.3f}**", "",
+             "> Interpretation: the raw slice mean overstates the edge because it "
+             "isn't date-matched and counts clustered hits as independent. If the "
+             "CI here still clears 0, S4-selection adds value beyond 'be long on a "
+             "down day'; if it straddles 0, PRIME is ordering/attention only - "
+             "never a sizing signal. Current-cohort/survivor caveats still apply."]
+    _write_prime(lines, market, out_dir)
+    print(f"[prime-audit] {n_hits} hits / {n_days} days · excess {point:.2f}% "
+          f"· 95% CI [{lo:.2f}, {hi:.2f}] · p(<=0)={p_le0:.3f}")
+    return {"n_hits": n_hits, "n_days": n_days, "excess": round(point, 3),
+            "ci": [round(lo, 3), round(hi, 3)], "p_le0": round(p_le0, 3)}
+
+
+def _write_prime(lines, market, out_dir):
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, f"report_{market}_prime.md")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    return path
+
+
 def _rs_table(bundle, bench_daily):
     closes = pd.DataFrame({t: d["close"] for t, (d, _) in bundle.items()})
     r = closes / closes.shift(CFG.rs_window) - 1
@@ -703,6 +827,8 @@ def main():
                     help="run N parity checks (replay vs live scanner) before the study")
     ap.add_argument("--period", default=None,
                     help=f"history window (default {CFG.bt_period}; scan default stays shorter)")
+    ap.add_argument("--prime-audit", action="store_true",
+                    help="date-matched + block-bootstrap audit of the S4/PRIME claim (writes report_<mkt>_prime.md)")
     ap.add_argument("--out", default="backtest")
     a = ap.parse_args()
 
@@ -727,6 +853,12 @@ def main():
             print("   ", m)
         if mism:
             print("[bt] WARNING: replay diverges from live scanner; results suspect")
+
+    if getattr(a, "prime_audit", False):
+        print("[bt] PRIME audit: date-matched baseline + block bootstrap by date")
+        prime_audit(bundle, market=a.market, bench_daily=bench,
+                    horizon=max(a.horizons), period=a.period, out_dir=a.out)
+        return
 
     if a.candidates:
         print("[bt] CANDIDATE study (experimental setups; promotion bar |t|>=2.5 "

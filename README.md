@@ -220,6 +220,20 @@ and materially better:
   down-weighted; **evening_star retired** (negative expectancy in all three
   markets in the event study).
 
+## PRIME audit (date-matched + block bootstrap)
+
+`python -m pa_scanner.backtest --market us --prime-audit --horizons 63` scopes
+the two criticisms that most inflate the S4-in-bench-bearish (PRIME) claim.
+(1) **Date-matched baseline**: each S4-long hit on a bearish-bench date is
+compared to the mean forward return of ALL longs available on that SAME date,
+so 'stocks bounce on down days' is subtracted and only S4's selection excess
+remains. (2) **Block bootstrap by date**: whole dates are resampled with
+replacement (each selloff = one block carrying all its hits), so the 95% CI
+reflects the number of independent DAYS, not clustered hits. Writes
+report_<mkt>_prime.md with date-matched mean excess, bootstrap CI, p(excess<=0),
+and the independent-day count. If the CI straddles 0, PRIME is
+ordering/attention only - never a sizing signal.
+
 ## OCO exit-policy simulation
 
 Every directional event is now also replayed as the **actual bracket the app

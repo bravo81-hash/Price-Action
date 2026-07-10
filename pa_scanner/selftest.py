@@ -681,6 +681,41 @@ def main():
     check("live NOT ok when TWS unavailable (fail-loud precondition)",
           lhealth["ok"] is False)
 
+    print("PRIME audit (date-matched + block bootstrap)")
+    from .backtest import prime_audit as _pa
+    import tempfile as _tf
+    # 10 names, staggered flushes so S4 fires across several distinct dates
+    def _flushframe(n=360, seed=0, offsets=(-40, -25, -12)):
+        rng = np.random.default_rng(seed)
+        c = 100.0 + 0.15 * np.arange(n) + rng.normal(0, 0.1, n).cumsum()
+        for b in offsets:
+            for k, off in ((3, 0.0), (2, 1.5), (1, 3.0)):
+                c[b - k] = c[b - 4] - 1.0 - off
+        o = c + rng.normal(0, 0.05, n)
+        idx = pd.bdate_range("2021-01-04", periods=n)
+        return pd.DataFrame({"open": o, "high": np.maximum(o, c) + 0.4,
+                             "low": np.minimum(o, c) - 0.4, "close": c,
+                             "volume": np.full(n, 2e6)}, index=idx)
+    pab = {f"P{i}": (_flushframe(seed=i), dl.to_weekly(_flushframe(seed=i)))
+           for i in range(6)}
+    bn = 360
+    bc = np.concatenate([100 + 0.1 * np.arange(320), 132 - 0.5 * np.arange(40)])
+    pbench = pd.DataFrame({"open": bc, "high": bc + 1, "low": bc - 1, "close": bc,
+                           "volume": np.full(bn, 1e6)},
+                          index=pd.bdate_range("2021-01-04", periods=bn))
+    with _tf.TemporaryDirectory() as ptd:
+        res = _pa(pab, market="us", bench_daily=pbench, horizon=20,
+                  n_boot=300, out_dir=ptd)
+        check("prime_audit returns hits/days/CI structure",
+              "n_hits" in res and ("ci" in res or res["n_hits"] == 0))
+        check("prime_audit wrote report_us_prime.md",
+              os.path.exists(os.path.join(ptd, "report_us_prime.md")))
+        if res.get("n_hits"):
+            check("prime_audit CI is ordered [lo, hi]",
+                  res["ci"][0] <= res["ci"][1])
+            check("prime_audit reports independent-day count <= hit count",
+                  res["n_days"] <= res["n_hits"])
+
     print("OCO exit-policy simulator")
     from .backtest import _simulate_oco, _oco_stats, _template_for
     check("US S4 template = 2.0/1.5/5", _template_for("S4", "long", "us") == (2.0, 1.5, 5))
