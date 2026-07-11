@@ -275,7 +275,10 @@ and raw `events_<mkt>.csv`.
 
 Live in all markets, **long-only**, close above the 200SMA, with two
 backtest-promoted triggers: **RSI(3) < 15 with a 2+ down-close streak**
-(round 1: US 5d +0.38% t=3.44, ASX t=2.13 — RSI(3) beat the RSI(2) textbook
+(promotion-era discovery stats: US 5d +0.38% t=3.44, ASX t=2.13 — DID NOT
+replicate on the refreshed 2026 cohort: ~0 excess at every horizon in every
+trigger cell, robust to cooldown 10/21; S4 is retained on realized OCO
+expectancy (+0.05R/trade), not selection alpha. RSI(3) beat the RSI(2) textbook
 variant in the US parameter test) **or a 4+ consecutive-down-close flush**
 (round 2 STRK4: US t=3.17, ASX t=2.73, ASX persistence 21–63d;
 `s4_streak_min`). Exits: US 5-bar time exit (`s4_time_bars`) with 2.0/1.5 ATR;
@@ -377,7 +380,7 @@ high + volume), **HVOL** (>=3x-volume day premium, both sides), **GAPD**
 (>=1-ATR gap held into the close, PEAD proxy, both sides), **OSMR** (RSI(3)
 oversold snapback above the 200SMA), **PBEMA** (6-month momentum leader, first
 20-EMA touch). Promotion bar (pre-registered): |t| >= 2.5 at two adjacent
-horizons with consistent sign, or >= 2.0 replicated across US and ASX. Round-1 verdicts (5y, side-matched): **OSMR promoted -> live rule S4**;
+horizons with consistent sign, or >= 2.0 replicated across US and ASX. Round-1 verdicts (5y, side-matched): **OSMR promoted -> live rule S4** (2026 replication: selection excess ~0 in all trigger cells; retained on realized OCO expectancy only);
 PBEMA near-miss (US 63d t=2.33, ASX 1.65) parked for out-of-sample re-test;
 NH52/HVOL/GAPD failed and were deleted; all candidate shorts harmful (US t=-3.9).
 

@@ -141,7 +141,7 @@ markets. Full per-slice tables live in <code>backtest/report_&lt;mkt&gt;.md</cod
 <div class="card"><b class="mkt">Candidate study</b> — five documented-anomaly setups tested
 (promotion bar pre-registered: |t|≥2.5 at two adjacent horizons, or ≥2.0 replicated US+ASX):
 <ul>
-<li><span class="pos">OSMR promoted → live rule S4</span>: oversold snapback in uptrend. US 5d excess +0.38% (t=3.44), ASX +0.34% (t=2.13), ASX persistence to 63d (t=2.31). Shallowest MAE of all candidates.</li>
+<li><span class="pos">OSMR promoted → live rule S4</span>: oversold snapback in uptrend. Promotion-era discovery stats: US 5d excess +0.38% (t=3.44), ASX +0.34% (t=2.13). <b>2026 replication update</b>: on the refreshed 5y cohort the selection excess is ~0 at every horizon in every trigger cell (5d: rsi-only −0.03%, streak-only +0.05%, |t|&lt;0.5; robust to cooldown 10 vs 21) — the promotion t-stats were discovery-sample selection statistics, as the external audit warned. S4 is retained because it is the <b>only rule whose printed bracket nets positive realized OCO expectancy</b> (+0.05R / +0.28%/trade pre-cost, stable across cooldowns); it is not a validated selection edge. Shallowest MAE of all candidates.</li>
 <li><span class="neu">PBEMA near-miss</span> (US 63d t=2.33, ASX 1.65 — below bar): parked in candidates.py for a future out-of-sample re-test.</li>
 <li><span class="neg">NH52, HVOL, GAPD failed</span>; candidate shorts were harmful everywhere (US all-shorts t=−3.9) — no short setups added.</li>
 <li>RS≥70 conditioning replicated in both markets (t=2.26 / 1.96), reinforcing the RS layer.</li>
@@ -178,7 +178,7 @@ channel with volume confirmation. Must be fresh (≤1 bar old) and not already e
 &gt;1.5 ATR past the trigger — stale, chased breakouts are excluded.</td></tr>
 <tr><td><b>S4</b></td><td>Oversold snapback</td>
 <td>Long-only mean reversion above the 200SMA. Two backtest-promoted triggers: RSI(3) &lt; 15 with
-2+ down closes (round 1: US 5d t=3.44, ASX t=2.13), or a 4+ consecutive-down-close flush
+2+ down closes, or a 4+ consecutive-down-close flush (promotion-era stats did not replicate on the refreshed cohort — S4 stands on realized OCO expectancy, not selection alpha)
 (round 2: US t=3.17, ASX t=2.73). US: 5-bar time exit. ASX: position template (3.5/4.5×ATR,
 63 bars — excess grows with horizon there). Exempt from the STAND-DOWN banner: MR outperforms
 in bearish regimes — RETIRED: the date-matched PRIME audit (US and ASX both p≈0.60) showed the raw slice was date effect × clustering.</td></tr>
