@@ -8,7 +8,8 @@ are labelled as context.
 
 US uses SPY + QQQ/IWM/^VIX/HYG when available; ASX/India degrade to a
 benchmark-only read (companion feeds None -> those checks are skipped).
-S4 remains exempt from RISK_OFF per the validated MR-in-bear-regime finding.
+    S4 remains outside the S1/S2 stand-down because that warning was measured
+    only on trend-entry rules; this is not a positive S4 regime claim.
 """
 from __future__ import annotations
 

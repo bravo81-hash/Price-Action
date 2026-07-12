@@ -490,7 +490,8 @@ def add_live_directional(rows, market="asx"):
     return rows, health
 
 
-def add_regime(rows, bundle, iv_enrich=None, vix_backwardation=None, live=False, market="us"):
+def add_regime(rows, bundle, iv_enrich=None, vix_backwardation=None, live=False,
+               market="us", return_health=False):
     """Annotate each hit row with direction read, vol-state, and suggested structure.
 
     Direction is price-only (computed for every hit). Vol-state uses the primary
@@ -502,7 +503,9 @@ def add_regime(rows, bundle, iv_enrich=None, vix_backwardation=None, live=False,
         iv_enrich = CFG.iv_enrich_hits
     primary, baseline = make_vol_provider(iv_enrich, vix_backwardation, market=market)
     cap = getattr(primary, "enrich_cap", None)   # TWS: limit enriched hits (pacing)
-    is_live = live and hasattr(primary, "snapshot")   # real-time prices available?
+    is_live = live and hasattr(primary, "snapshot")   # real-time TWS prices available?
+    live_health = {"connected": bool(is_live), "fresh": 0,
+                   "total": len(rows), "ok": False}
     dir_cache, vol_cache, live_cache, enriched = {}, {}, {}, set()
 
     try:
@@ -570,6 +573,10 @@ def add_regime(rows, bundle, iv_enrich=None, vix_backwardation=None, live=False,
             primary.close()
     if is_live:
         n_live = sum(1 for r in rows if r.get("live") is not None)
-        print(f"[live] real-time prices on {n_live}/{len(rows)} signals")
+        frac = (n_live / len(rows)) if rows else 0.0
+        live_health.update({"fresh": n_live,
+                            "ok": frac >= CFG.live_min_fresh_frac})
+        print(f"[live] real-time prices on {n_live}/{len(rows)} signals "
+              f"({frac:.0%}; need {CFG.live_min_fresh_frac:.0%})")
     print(f"[regime] vol-enriched {len(enriched)}/{len(dir_cache)} hit-tickers")
-    return rows
+    return (rows, live_health) if return_health else rows

@@ -234,18 +234,38 @@ report_<mkt>_prime.md with date-matched mean excess, bootstrap CI, p(excess<=0),
 and the independent-day count. If the CI straddles 0, PRIME is
 ordering/attention only - never a sizing signal.
 
-## OCO exit-policy simulation
+## OCO exit-policy simulation + matched audit
 
 Every directional event is now also replayed as the **actual bracket the app
 prints** - stop k_s x ATR, target k_t x ATR, time exit (per-market template:
 US S4 2.0/1.5/5, ASX S4 & India S2-long 3.5/4.5/63, else 2.0/1.5/10) - with
-entry at the signal close and the stop assumed first on a both-touched bar.
+entry at the next session's open, gap-through fills at the open, market-specific
+round-trip costs, and the stop assumed first on a both-touched bar. Trades without
+their complete time horizon are right-censored rather than force-exited early.
 The report's **OCO exit-policy (realized)** table gives per-rule n, win%,
 **exp_R** (mean R-multiple; positive = the template nets money on this
 cohort), exp_%, the target/stop/time outcome split, and average bars held.
-This tests the exit POLICY, which the MAE/MFE distributions never did -
+This describes the exit POLICY, which the MAE/MFE distributions never did -
 MAE/MFE showed where price wandered, not whether a 0.75-R:R bracket profits
-after the stop-first convention. Same current-cohort/clustering caveats apply.
+after the stop-first convention. Raw expectancy is not selection alpha. Run
+`python -m pa_scanner.backtest --market us --oco-audit` to apply the identical
+policy to same-date non-S4 controls matched on SMA200 side, ATR%, distance from
+SMA200 and relative strength. The audit collapses hits to weeks, uses a moving-
+block bootstrap, and reports a final 20% chronological-tail diagnostic. That
+tail is not untouched rule-development OOS because S4 was originally researched
+on the full cohort. S4 is promoted only if matched excess clears zero and the
+tail remains positive, followed by genuine forward evidence.
+
+Full five-year current-cohort results (2026-07-12):
+
+- **US:** 11,636 hits / 58,180 controls / 218 weeks; +0.0154R matched excess,
+  95% moving-block CI [-0.0046,+0.0362], final-20% holdout +0.0347R — near-miss,
+  remains **EXPERIMENTAL**.
+- **ASX:** 827 hits / 4,135 controls / 179 weeks; -0.0461R, CI
+  [-0.1238,+0.0357], holdout -0.1655R — **AVOID**, no support for trading the
+  long-duration S4 template.
+- **India:** 2,415 hits / 12,075 controls / 209 weeks; +0.0191R, CI
+  [-0.0112,+0.0488], holdout -0.0114R — not promoted; **CONTEXT** only.
 
 ## Backtest (event study)
 
@@ -271,19 +291,20 @@ and raw `events_<mkt>.csv`.
 - First-fire events only (10-bar cooldown per ticker+rule+side); entries are
   next-day-close-agnostic (event-study convention: signal-bar close to t+h close).
 
-## S4 — Oversold snapback (promoted candidate)
+## S4 — Oversold snapback (experimental / forward-track)
 
-Live in all markets, **long-only**, close above the 200SMA, with two
-backtest-promoted triggers: **RSI(3) < 15 with a 2+ down-close streak**
+Live in all markets as an **experimental, long-only** screen above the 200SMA,
+with two former promotion triggers: **RSI(3) < 15 with a 2+ down-close streak**
 (promotion-era discovery stats: US 5d +0.38% t=3.44, ASX t=2.13 — DID NOT
 replicate on the refreshed 2026 cohort: ~0 excess at every horizon in every
-trigger cell, robust to cooldown 10/21; S4 is retained on realized OCO
-expectancy (+0.05R/trade), not selection alpha. RSI(3) beat the RSI(2) textbook
+trigger cell, robust to cooldown 10/21. The old +0.05R pre-cost OCO result was
+raw policy expectancy, not selection alpha; S4 remains forward-track pending
+the matched, costed `--oco-audit`. RSI(3) beat the RSI(2) textbook
 variant in the US parameter test) **or a 4+ consecutive-down-close flush**
 (round 2 STRK4: US t=3.17, ASX t=2.73, ASX persistence 21–63d;
 `s4_streak_min`). Exits: US 5-bar time exit (`s4_time_bars`) with 2.0/1.5 ATR;
-**ASX S4 uses the position template** (3.5/4.5 ATR, 63 bars) because ASX MR
-excess grows monotonically with horizon. **S4 is exempt from the STAND-DOWN
+ASX still carries the historical 3.5/4.5 ATR, 63-bar research template, but its
+matched OCO audit is negative and the board now marks it **AVOID**. **S4 is exempt from the STAND-DOWN
 banner** — the raw bearish-regime slices looked strong
 (US +5.57% excess @63d t=9.37, ASX +4.09% t=6.96) but BOTH failed the
 date-matched + block-bootstrap PRIME audit (US: -0.36%, CI [-3.60,+3.11],
@@ -352,8 +373,9 @@ independent bearish dates, date-matched excess **−0.36%**, 95% CI
 long that day; the raw +5.57% was date effect × clustering. `s4_prime` now
 defaults **False** (plumbing kept; re-enable only for a market whose own
 prime-audit CI clears zero). The S4 index-penalty exemption, which rested on
-the same cell, is also removed. OCO simulation shows S4 remains the only rule
-with positive realized exit-policy expectancy (US +0.053R/trade pre-cost).
+the same cell, is also removed. The old OCO simulation showed +0.053R/trade
+pre-cost, but that result is not a promotion claim: it used no matched control,
+signal-close fills and no costs. S4 is EXPERIMENTAL until `--oco-audit` clears.
 
 **Forward ledger:** each scan appends its hits to
 `docs/data/ledger_<mkt>.json` (entry = signal close, exits from the row's

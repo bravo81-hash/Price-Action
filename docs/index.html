@@ -141,7 +141,7 @@ markets. Full per-slice tables live in <code>backtest/report_&lt;mkt&gt;.md</cod
 <div class="card"><b class="mkt">Candidate study</b> — five documented-anomaly setups tested
 (promotion bar pre-registered: |t|≥2.5 at two adjacent horizons, or ≥2.0 replicated US+ASX):
 <ul>
-<li><span class="pos">OSMR promoted → live rule S4</span>: oversold snapback in uptrend. Promotion-era discovery stats: US 5d excess +0.38% (t=3.44), ASX +0.34% (t=2.13). <b>2026 replication update</b>: on the refreshed 5y cohort the selection excess is ~0 at every horizon in every trigger cell (5d: rsi-only −0.03%, streak-only +0.05%, |t|&lt;0.5; robust to cooldown 10 vs 21) — the promotion t-stats were discovery-sample selection statistics, as the external audit warned. S4 is retained because it is the <b>only rule whose printed bracket nets positive realized OCO expectancy</b> (+0.05R / +0.28%/trade pre-cost, stable across cooldowns); it is not a validated selection edge. Shallowest MAE of all candidates.</li>
+<li><span class="neu">OSMR → experimental live rule S4</span>: oversold snapback in uptrend. Promotion-era discovery stats: US 5d excess +0.38% (t=3.44), ASX +0.34% (t=2.13). <b>2026 replication update</b>: on the refreshed 5y cohort the selection excess is ~0 at every horizon in every trigger cell (5d: rsi-only −0.03%, streak-only +0.05%, |t|&lt;0.5; robust to cooldown 10 vs 21). The old +0.05R result was raw, pre-cost bracket expectancy—not a validated selection edge. S4 now remains EXPERIMENTAL pending the matched, costed <code>--oco-audit</code>.</li>
 <li><span class="neu">PBEMA near-miss</span> (US 63d t=2.33, ASX 1.65 — below bar): parked in candidates.py for a future out-of-sample re-test.</li>
 <li><span class="neg">NH52, HVOL, GAPD failed</span>; candidate shorts were harmful everywhere (US all-shorts t=−3.9) — no short setups added.</li>
 <li>RS≥70 conditioning replicated in both markets (t=2.26 / 1.96), reinforcing the RS layer.</li>
@@ -150,7 +150,9 @@ markets. Full per-slice tables live in <code>backtest/report_&lt;mkt&gt;.md</cod
 
 <div class="card"><b class="mkt">PRIME audit</b> — <code>--prime-audit</code> re-tests the S4/PRIME "+5.6% @63d" claim honestly: a <b>date-matched</b> baseline (each hit vs all longs available that same day, subtracting "stocks bounce on down days") and a <b>block bootstrap by date</b> (each selloff = one independent observation, not N clustered hits). Reports the corrected mean excess, a bootstrap 95% CI, and p(excess≤0). If the CI straddles 0, PRIME is attention/ordering only — never a sizing signal.</div>
 
-<div class="card"><b class="mkt">OCO exit-policy simulation</b> — each directional signal is replayed as the exact stop/target/time bracket the app prints (entry at signal close, stop wins a both-touched bar). The backtest report's realized OCO table shows per-rule win%, <b>exp_R</b> (mean R-multiple — positive means the template nets money), and the target/stop/time split. This tests whether the exit <i>policy</i> profits, which MAE/MFE never did. Run <code>run_backtest.bat</code> and read the "OCO exit-policy (realized)" section before trusting any template's expectancy.</div>
+<div class="card"><b class="mkt">Matched OCO audit</b> — <code>--oco-audit</code> uses next-session-open entry, gap-aware fills, costs and right-censoring, then applies the same ATR bracket policy to same-date non-hit controls matched on SMA200 side, ATR%, trend extension and relative strength. Hit excess is collapsed to weeks and tested with moving-block bootstrap plus a final 20% chronological-tail diagnostic. The tail is not untouched rule-development OOS; raw OCO expectancy alone never promotes a rule.</div>
+
+<div class="card"><b class="mkt">Matched OCO results (2026-07-12)</b> — US: +0.0154R, CI [−0.0046,+0.0362], holdout +0.0347R → <b class="neu">EXPERIMENTAL</b>. ASX: −0.0461R, CI [−0.1238,+0.0357], holdout −0.1655R → <b class="neg">AVOID</b>. India: +0.0191R, CI [−0.0112,+0.0488], holdout −0.0114R → <b class="neu">CONTEXT</b>. None cleared promotion.</div>
 
 <div class="card"><b>Kept vs. changed</b> (round-1 and round-2 decisions from the 2y and 5y runs):
 <ul>
@@ -177,8 +179,8 @@ tags the zone — a rally poking above resistance does not count as "support."</
 channel with volume confirmation. Must be fresh (≤1 bar old) and not already extended
 &gt;1.5 ATR past the trigger — stale, chased breakouts are excluded.</td></tr>
 <tr><td><b>S4</b></td><td>Oversold snapback</td>
-<td>Long-only mean reversion above the 200SMA. Two backtest-promoted triggers: RSI(3) &lt; 15 with
-2+ down closes, or a 4+ consecutive-down-close flush (promotion-era stats did not replicate on the refreshed cohort — S4 stands on realized OCO expectancy, not selection alpha)
+<td>Experimental long-only mean reversion above the 200SMA. Two former promotion triggers: RSI(3) &lt; 15 with
+2+ down closes, or a 4+ consecutive-down-close flush (promotion-era stats did not replicate; matched OCO evidence is pending)
 (round 2: US t=3.17, ASX t=2.73). US: 5-bar time exit. ASX: position template (3.5/4.5×ATR,
 63 bars — excess grows with horizon there). Exempt from the STAND-DOWN banner: MR outperforms
 in bearish regimes — RETIRED: the date-matched PRIME audit (US and ASX both p≈0.60) showed the raw slice was date effect × clustering.</td></tr>
@@ -273,13 +275,13 @@ target 1.5×ATR, 10-bar time exit.</li>
 <li><b>Exit / manage:</b> exit or adjust on a daily close through either range edge ("broke"); otherwise manage to your premium plan and review at ~10 bars.</li>
 </ul></div>
 
-<div class="card"><b class="mkt">S4 — Oversold snapback</b> (long only · all markets · <span class="pos">backtest-promoted, both triggers</span>)
+<div class="card"><b class="mkt">S4 — Oversold snapback</b> (long only · market-specific evidence: <span class="neu">US EXPERIMENTAL</span> · <span class="neg">ASX AVOID</span> · <span class="neu">India CONTEXT</span>)
 <ul>
 <li><b>Setup:</b> close above the 200-day SMA (long-term uptrend intact).</li>
 <li><b>Entry (either trigger):</b> RSI(3) &lt; 15 with ≥ 2 consecutive down closes, <b>or</b> ≥ 4 consecutive down closes regardless of RSI. Enter at the flush-day close (last hour).</li>
 <li><b>US:</b> SL 2.0×ATR · PT 1.5×ATR · time exit <b>5 bars</b> — the edge is 3–10 days; do not linger.</li>
-<li><b>ASX:</b> position template — SL 3.5×ATR · PT 4.5×ATR · time exit <b>63 bars</b> (excess grows with horizon there).</li>
-<li><b>India:</b> standard 2.0×ATR / 1.5×ATR / <b>5-bar</b> time exit (same as US — only ASX gets the position template for S4).</li>
+<li><b>ASX:</b> historical research template SL 3.5×ATR · PT 4.5×ATR · 63 bars, but the matched audit is negative with a sharply negative holdout — board status <b class="neg">AVOID</b>.</li>
+<li><b>India:</b> standard 2.0×ATR / 1.5×ATR / 5 bars remains available for forward tracking, but matched evidence did not promote it — <b class="neu">CONTEXT</b>.</li>
 <li><b>PRIME (retired):</b> the bearish-regime "supercharge" failed the date-matched + block-bootstrap audit in BOTH markets (US −0.36%, CI [−3.60,+3.11], p=0.60, 94 independent days; ASX −0.24%, CI [−2.10,+1.72], p=0.60, 95 days). S4 in bearish regimes = ordinary S4. It stays exempt from the S1/S2 stand-down <i>warning</i> (that evidence is trend-entry-specific), but there is no bearish bonus. Prefer higher realized-vol names — they snapped hardest (replicated).</li>
 <li><b>Never short</b> this or any setup here — candidate shorts were harmful in every market.</li>
 </ul></div>
@@ -297,9 +299,9 @@ target 1.5×ATR, 10-bar time exit.</li>
 cell did not survive honest testing: 795 hits collapse to <b>94 independent bearish dates</b>,
 and against a same-date all-longs baseline the excess is <b>−0.36%</b> (95% bootstrap CI
 [−3.60%, +3.11%], p(≤0)=0.60) — S4 selection adds nothing beyond being long on a down day.
-The raw number was date effect × clustering. S4 itself remains the app's best rule (the only
-one with positive realized OCO expectancy); it just isn't "supercharged" by bearish regimes.
-Run <code>--prime-audit</code> per market before ever re-enabling <code>s4_prime</code>.</p>
+The raw number was date effect × clustering. S4's separate raw OCO expectancy is not evidence
+that it selects better trades; the identical bracket must beat matched controls under
+<code>--oco-audit</code>. Run both audits before considering promotion or re-enabling PRIME.</p>
 
 <h2>Market state line + Qty (STFS-EQ imports)</h2>
 <p>The header shows a <b>market state</b> next to the benchmark regime —
@@ -323,17 +325,16 @@ open positions.</p>
 each tier is tied to a backtest finding, not a heuristic. Tap a card to filter the table to that
 rule.</p>
 <ul>
-<li><b>PRIME</b> (gold) — must-consider. Only S4 in a bench-bearish regime: mean reversion is
-was believed supercharged there — retired by the PRIME audit (US and ASX both p≈0.60 after date-matching + block bootstrap).</li>
-<li><b>PREFERRED</b> (green) — a validated edge is active (e.g. S3 premium selling; India S2
-position trade; India S1 exit flags).</li>
+<li><b>PRIME</b> (gold) — retired. The S4 bearish-regime claim failed the PRIME audit in both markets.</li>
+<li><b>PREFERRED</b> (green) — evidence has cleared the current promotion standard.</li>
+<li><b>EXPERIMENTAL</b> (blue) — interesting forward-track setup whose matched edge is not established (currently US S4 and India S2).</li>
 <li><b>CONTEXT</b> (grey) — no measured entry edge; treat as candidate ideas / stand-aside flags.</li>
 <li><b>CAUTION</b> (amber) — usable with a caveat (e.g. US S2: don't hold past ~21d).</li>
 <li><b>AVOID</b> (red) — negative expectancy in this regime (S1/S2 during a bench-bearish
 stand-down). The card names the better alternative to use instead.</li>
 </ul>
-<p>The order reshuffles daily with the benchmark regime: on a bearish day S4 jumps to PRIME and
-S1/S2 drop to AVOID; on a bull day S4/S3 lead and S1/S2 fall to context. Hit counts show how many
+<p>The order reshuffles daily with the benchmark regime: in bearish conditions S1/S2 drop to AVOID;
+S4 remains EXPERIMENTAL in every regime until its matched OCO audit clears. Hit counts show how many
 signals each rule actually produced today.</p>
 
 <h2>Columns (time-pressed workflow)</h2>
@@ -647,7 +648,8 @@ function applyData(d){
     b0.style.display="block";
   } else if(!d.note){ b0.style.display="none"; }
   const b=$("#banner");
-  if(d.note){ b.textContent = d.note; b.style.display="block"; } else { b.style.display="none"; }
+  if(d.note){ b.textContent = d.note; b.style.display="block"; }
+  else if(!(d.bench && d.bench.bias==="bearish")){ b.style.display="none"; }
   BOARD = (d.bench && d.bench.board) ? d.bench.board : null;
   buildChrome();
   renderBoard();

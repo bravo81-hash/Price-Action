@@ -37,6 +37,14 @@ def fetch_vix_backwardation():
         return None
 
 
+def _live_failure_reason(health):
+    """Human-readable reason for a failed --live health gate."""
+    if not (health or {}).get("connected"):
+        return "TWS not connected"
+    return (f"only {(health or {}).get('fresh', 0)}/"
+            f"{(health or {}).get('total', 0)} rows got fresh quotes")
+
+
 def main():
     ap = argparse.ArgumentParser(description="Weekly-level / trend-pullback price-action scanner")
     ap.add_argument("--market", choices=list(MARKETS), default="us",
@@ -125,10 +133,10 @@ def main():
     mark_prime(rows, binfo, market=a.market)
     rows.sort(key=lambda r: (bool(r.get("prime")), r["score"]), reverse=True)
 
+    live_health = None
     if directional:
         print(f"[scan] {len(rows)} signals; assigning long-only actions...")
         add_action(rows, bundle)
-        live_health = None
         if live_directional:
             print(f"[scan] {len(rows)} signals; real-time TWS refresh...")
             _, live_health = add_live_directional(rows, market=a.market)
@@ -136,10 +144,25 @@ def main():
         print(f"[scan] {len(rows)} signals; classifying regime"
               + (" + IV enrichment" if (CFG.iv_enrich_hits and not a.no_iv) else "") + "...")
         vix_bw = fetch_vix_backwardation()
-        add_regime(rows, bundle, iv_enrich=(CFG.iv_enrich_hits and not a.no_iv),
-                   vix_backwardation=vix_bw, live=live, market=a.market)
+        if live:
+            rows, live_health = add_regime(
+                rows, bundle, iv_enrich=(CFG.iv_enrich_hits and not a.no_iv),
+                vix_backwardation=vix_bw, live=True, market=a.market,
+                return_health=True)
+        else:
+            add_regime(rows, bundle, iv_enrich=(CFG.iv_enrich_hits and not a.no_iv),
+                       vix_backwardation=vix_bw, live=False, market=a.market)
         if CFG.earnings_enrich and not a.no_earnings:
             annotate_earnings(rows)
+
+    # Fail before writing reports or publishing snapshots. A command explicitly
+    # named --live must never leave behind a fresh-looking fallback artifact.
+    live_requested = a.live and a.market in ("us", "asx")
+    if live_requested and rows and not (live_health or {}).get("ok"):
+        reason = _live_failure_reason(live_health)
+        print(f"[live] FAIL: real-time data incomplete ({reason}). "
+              f"Is TWS running, logged in, and entitled for {a.market.upper()}?")
+        sys.exit(2)
 
     compute_rank(rows)
     add_exit_levels(rows, market=a.market)
@@ -164,18 +187,6 @@ def main():
         write_report(rows, out, scanned=len(bundle), universe=len(syms),
                      market=a.market, bench=binfo)
         print(f"[scan] HTML report -> {out}")
-
-    # --live must FAIL LOUD: a command named "live" should not silently serve
-    # delayed data. Directional live reports health; exit nonzero if not ok.
-    if live_directional and rows:
-        if live_health is None or not live_health.get("ok"):
-            reason = ("TWS not connected" if not (live_health or {}).get("connected")
-                      else f"only {(live_health or {}).get('fresh', 0)}/"
-                           f"{(live_health or {}).get('total', 0)} rows got fresh quotes")
-            print(f"[live] FAIL: real-time data incomplete ({reason}). "
-                  f"Is TWS running, logged in, and entitled for {a.market.upper()}?")
-            sys.exit(2)
-
 
 if __name__ == "__main__":
     main()

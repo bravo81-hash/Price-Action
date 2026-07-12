@@ -51,6 +51,7 @@ from .scanner import SymbolContext, prepare_context
 MAX_AGE_SCAN = 15          # mirrors prepare_context's age cap
 WEAK_BULL = ("hammer", "tweezer_bottom")
 WEAK_BEAR = ("shooting_star", "tweezer_top")
+DEFAULT_OCO_COST_BPS = {"us": 10.0, "asx": 15.0, "in": 20.0}
 
 
 # --------------------------------------------------------------------------
@@ -104,6 +105,7 @@ def _daily_arrays(d):
     """Full-series causal arrays matching prepare_context field-for-field."""
     A = {}
     c, h, lo, v = d["close"], d["high"], d["low"], d["volume"]
+    A["open"] = d["open"].to_numpy(float)
     A["close"], A["high"], A["low"], A["vol"] = (x.to_numpy(float) for x in (c, h, lo, v))
     A["atr"] = ind.atr(d).to_numpy()
     ema20 = ind.ema(c, CFG.ema_fast_daily)
@@ -358,18 +360,25 @@ def _template_for(signal, side, market):
     return CFG.exit_stop_atr, CFG.exit_target_atr, CFG.exit_time_bars
 
 
-def _simulate_oco(e, arrs, market):
-    """Replay one directional event as the OCO bracket the app prints:
-    entry = signal-bar close; stop = k_s x ATR, target = k_t x ATR, plus a
-    time exit. Conservative fills: if a single bar spans BOTH stop and target,
-    the STOP is assumed hit first (matches the live ledger convention). Returns
-    the event augmented with outcome / R-multiple / net %.
+def _simulate_oco(e, arrs, market, entry_mode="next_open", cost_bps=0.0):
+    """Replay one directional event with executable bracket assumptions.
+
+    The default entry is the next session's open; ``signal_close`` is retained
+    only as an explicit sensitivity mode. Gaps through a stop/target fill at the
+    open, same-bar ambiguity resolves to the stop, and unresolved trades without
+    their complete time horizon are marked ``censored`` rather than converted to
+    artificially short time exits. ``cost_bps`` is round-trip friction deducted
+    from every completed trade.
     """
     if e["side"] not in ("long", "short"):
         return e
     A = arrs[e["ticker"]]
     t = e["t"]
-    entry = A["close"][t]
+    entry_i = t + 1 if entry_mode == "next_open" else t
+    if entry_i >= len(A["close"]):
+        e["oco_outcome"] = "censored"
+        return e
+    entry = A.get("open", A["close"])[entry_i] if entry_mode == "next_open" else A["close"][t]
     atr = A["atr"][t]
     if not atr or atr <= 0 or not entry:
         return e
@@ -379,10 +388,26 @@ def _simulate_oco(e, arrs, market):
     tgt = entry + kt * atr if long else entry - kt * atr
     risk = ks * atr
     n = len(A["close"])
-    outcome, exit_px, bars = "time", None, 0
-    for i in range(t + 1, min(t + 1 + tmax, n)):
+    deadline = t + tmax
+    outcome, exit_px, bars = None, None, 0
+    last_i = min(deadline, n - 1)
+    # Exits begin after the signal bar. For next-open entry this includes the
+    # entry session; for signal-close sensitivity it starts the following day.
+    for i in range(t + 1, last_i + 1):
+        op = A.get("open", A["close"])[i]
         hi, lo = A["high"][i], A["low"][i]
         bars = i - t
+        # From the second held session onward, an overnight gap can cross an
+        # existing order. The executable fill is the open, not the stale level.
+        if entry_mode == "signal_close" or i > entry_i:
+            gap_stop = (op <= stop) if long else (op >= stop)
+            gap_tgt = (op >= tgt) if long else (op <= tgt)
+            if gap_stop:
+                outcome, exit_px = "stop", op
+                break
+            if gap_tgt:
+                outcome, exit_px = "target", op
+                break
         hit_stop = (lo <= stop) if long else (hi >= stop)
         hit_tgt = (hi >= tgt) if long else (lo <= tgt)
         if hit_stop:                       # stop wins a both-touched bar
@@ -391,14 +416,23 @@ def _simulate_oco(e, arrs, market):
         if hit_tgt:
             outcome, exit_px = "target", tgt
             break
-    if exit_px is None:                    # timed out
-        idx = min(t + tmax, n - 1)
-        exit_px, bars = A["close"][idx], idx - t
-    pnl = (exit_px - entry) if long else (entry - exit_px)
+    if exit_px is None:
+        if deadline >= n:                  # incomplete observation window
+            e["oco_outcome"] = "censored"
+            e["oco_bars"] = max(0, n - 1 - t)
+            e["oco_entry_mode"] = entry_mode
+            return e
+        outcome, exit_px, bars = "time", A["close"][deadline], deadline - t
+    gross_pnl = (exit_px - entry) if long else (entry - exit_px)
+    cost = entry * float(cost_bps) / 10_000.0
+    pnl = gross_pnl - cost
     e["oco_outcome"] = outcome
-    e["oco_r"] = round(pnl / risk, 3) if risk else None
+    e["oco_gross_r"] = round(gross_pnl / risk, 4) if risk else None
+    e["oco_r"] = round(pnl / risk, 4) if risk else None
     e["oco_pct"] = round(pnl / entry * 100, 3)
     e["oco_bars"] = bars
+    e["oco_entry_mode"] = entry_mode
+    e["oco_cost_bps"] = float(cost_bps)
     return e
 
 
@@ -412,6 +446,7 @@ def _oco_stats(events):
     n = len(evs)
     oc = {o: sum(1 for e in evs if e["oco_outcome"] == o)
           for o in ("target", "stop", "time")}
+    censored = sum(1 for e in events if e.get("oco_outcome") == "censored")
     import statistics
     exp_r = statistics.fmean(rs)
     # per-trade expectancy in R already nets the R:R geometry; also give %.
@@ -419,7 +454,188 @@ def _oco_stats(events):
             "exp_R": round(exp_r, 3),
             "exp_%": round(statistics.fmean(e["oco_pct"] for e in evs), 3),
             "tgt/stop/time": f"{oc['target']}/{oc['stop']}/{oc['time']}",
-            "avg_bars": round(statistics.fmean(e["oco_bars"] for e in evs), 1)}
+            "avg_bars": round(statistics.fmean(e["oco_bars"] for e in evs), 1),
+            "censored": censored}
+
+
+def _moving_block_ci(values, block_len, n_boot=2000, seed=17):
+    """Circular moving-block bootstrap CI for a time-ordered weekly series."""
+    vals = np.asarray(values, float)
+    if len(vals) == 0:
+        return None
+    if len(vals) == 1 or n_boot <= 0:
+        x = float(vals.mean())
+        return x, x, float(x <= 0)
+    rng = random.Random(seed)
+    block_len = max(1, min(int(block_len), len(vals)))
+    boot = []
+    while len(boot) < n_boot:
+        sample = []
+        while len(sample) < len(vals):
+            start = rng.randrange(len(vals))
+            sample.extend(vals[(start + j) % len(vals)] for j in range(block_len))
+        boot.append(float(np.mean(sample[:len(vals)])))
+    boot.sort()
+    lo = boot[int(0.025 * (len(boot) - 1))]
+    hi = boot[int(0.975 * (len(boot) - 1))]
+    return lo, hi, sum(x <= 0 for x in boot) / len(boot)
+
+
+def _write_oco_audit(lines, market, out_dir):
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, f"report_{market}_oco_matched.md")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    return path
+
+
+def oco_matched_audit(bundle, market="us", signal="S4", side="long",
+                      controls_per_hit=5, cost_bps=None, n_boot=2000,
+                      seed=23, out_dir="backtest"):
+    """Test whether a signal selects better bracket outcomes than similar stocks.
+
+    Each hit is compared with same-date non-hit controls on the same side of the
+    200-day average, nearest by ATR%, distance from SMA200 and 63-day relative
+    strength. Both groups receive the exact same next-open, gap-aware, costed OCO
+    policy. Hit-level excesses are collapsed to calendar weeks before a moving-
+    block bootstrap, preventing a broad selloff from masquerading as N bets.
+    """
+    import statistics
+    cost_bps = DEFAULT_OCO_COST_BPS[market] if cost_bps is None else float(cost_bps)
+    _, _, tmax = _template_for(signal, side, market)
+    arrs, raw = {}, []
+    for tk, (d, wk) in bundle.items():
+        try:
+            ev, A = events_for_ticker(tk, d, wk, tmax)
+        except Exception:
+            continue
+        arrs[tk] = A
+        raw.extend(ev)
+    hits = [e for e in _dedup(raw, tmax)
+            if e["signal"] == signal and e["side"] == side]
+    rs = _rs_table({tk: bundle[tk] for tk in arrs}, None)
+    # Exclude every raw S4 fire from the control pool, including repeats removed
+    # by cooldown. A deduplicated repeat is still not a genuine non-hit.
+    hit_keys = {(e["ticker"], e["date"]) for e in raw
+                if e["signal"] == signal and e["side"] == side}
+    comparisons, n_controls, censored = [], 0, 0
+
+    def features(tk, t, dte):
+        A = arrs[tk]
+        px, atr, sma = A["close"][t], A["atr"][t], A["sma200"][t]
+        if not (np.isfinite(px) and px > 0 and np.isfinite(atr) and atr > 0
+                and np.isfinite(sma) and sma > 0):
+            return None
+        if side == "long" and px <= sma:
+            return None
+        if side == "short" and px >= sma:
+            return None
+        try:
+            rsp = rs.at[dte, tk]
+            rsp = 50.0 if pd.isna(rsp) else float(rsp)
+        except KeyError:
+            rsp = 50.0
+        return (float(atr / px), float(abs(px / sma - 1.0)), rsp)
+
+    for hit in hits:
+        hf = features(hit["ticker"], hit["t"], hit["date"])
+        if hf is None:
+            continue
+        he = dict(hit)
+        _simulate_oco(he, arrs, market, entry_mode="next_open", cost_bps=cost_bps)
+        he_close = dict(hit)
+        _simulate_oco(he_close, arrs, market, entry_mode="signal_close", cost_bps=cost_bps)
+        if he.get("oco_r") is None:
+            censored += 1
+            continue
+        candidates = []
+        for tk, A in arrs.items():
+            if tk == hit["ticker"] or (tk, hit["date"]) in hit_keys:
+                continue
+            idx = bundle[tk][0].index.get_indexer([hit["date"]])[0]
+            if idx < CFG.min_daily_bars - 1 or idx + tmax >= len(A["close"]):
+                continue
+            cf = features(tk, idx, hit["date"])
+            if cf is None:
+                continue
+            # Log ATR ratio is scale-neutral; other terms keep the match local
+            # in trend extension and relative-strength rank.
+            dist = (abs(np.log(cf[0] / hf[0]))
+                    + 5.0 * abs(cf[1] - hf[1])
+                    + abs(cf[2] - hf[2]) / 100.0)
+            candidates.append((dist, tk, idx))
+        controls, controls_close = [], []
+        for _, tk, idx in sorted(candidates)[:max(1, controls_per_hit)]:
+            ce = {"ticker": tk, "t": idx, "date": hit["date"],
+                  "signal": signal, "side": side}
+            _simulate_oco(ce, arrs, market, entry_mode="next_open", cost_bps=cost_bps)
+            if ce.get("oco_r") is not None:
+                controls.append(ce["oco_r"])
+            ce_close = {"ticker": tk, "t": idx, "date": hit["date"],
+                        "signal": signal, "side": side}
+            _simulate_oco(ce_close, arrs, market, entry_mode="signal_close",
+                          cost_bps=cost_bps)
+            if ce_close.get("oco_r") is not None:
+                controls_close.append(ce_close["oco_r"])
+        if not controls:
+            continue
+        comparisons.append({"date": hit["date"], "ticker": hit["ticker"],
+                            "hit_r": he["oco_r"],
+                            "control_r": statistics.fmean(controls),
+                            "excess_r": he["oco_r"] - statistics.fmean(controls),
+                            "excess_r_signal_close": (
+                                he_close["oco_r"] - statistics.fmean(controls_close)
+                                if he_close.get("oco_r") is not None and controls_close
+                                else np.nan),
+                            "n_controls": len(controls)})
+        n_controls += len(controls)
+
+    if not comparisons:
+        path = _write_oco_audit(
+            [f"# Matched OCO audit — {MARKETS[market]['label']}",
+             f"No usable {signal}/{side} hit-control comparisons."], market, out_dir)
+        return {"n_hits": 0, "report": path}
+
+    frame = pd.DataFrame(comparisons).sort_values("date")
+    frame["week"] = pd.to_datetime(frame["date"]).dt.to_period("W-FRI")
+    weekly = frame.groupby("week", sort=True)["excess_r"].mean()
+    weekly_close = frame.groupby("week", sort=True)["excess_r_signal_close"].mean().dropna()
+    block_weeks = max(2, int(np.ceil(tmax / 5.0)))
+    ci = _moving_block_ci(weekly.to_numpy(), block_weeks, n_boot=n_boot, seed=seed)
+    point = float(weekly.mean())
+    split = max(1, int(np.floor(0.8 * len(weekly))))
+    train = float(weekly.iloc[:split].mean())
+    holdout = (float(weekly.iloc[split:].mean()) if split < len(weekly) else None)
+    lo, hi, p_le0 = ci
+    close_point = float(weekly_close.mean()) if len(weekly_close) else None
+    lines = [f"# Matched OCO audit — {MARKETS[market]['label']}  ({dt.date.today()})", "",
+             f"Signal **{signal}/{side}**; next-open entry; gap-aware fills; "
+             f"{cost_bps:.1f} bps round-trip cost; same ATR stop/target/{tmax}-bar policy.",
+             f"Controls: up to {controls_per_hit} same-date non-hits, matched on SMA200 side, "
+             "ATR%, distance from SMA200 and 63-day relative strength.", "",
+             f"- usable hits: **{len(frame)}**; control paths: **{n_controls}**; "
+             f"censored hits excluded: **{censored}**",
+             f"- weekly-clustered matched excess: **{point:+.3f}R/trade**",
+             f"- moving-block bootstrap ({block_weeks} weeks) 95% CI: **[{lo:+.3f}, {hi:+.3f}]R**",
+             f"- bootstrap probability(excess <= 0): **{p_le0:.3f}**",
+             f"- first 80% of weeks: **{train:+.3f}R**",
+             f"- final 20% chronological tail: **{holdout:+.3f}R**" if holdout is not None else
+             "- final 20% chronological tail: insufficient independent weeks", "",
+             (f"- signal-close sensitivity (same controls/costs): **{close_point:+.3f}R**"
+              if close_point is not None else
+              "- signal-close sensitivity: insufficient completed comparisons"), "",
+             "> Promotion requires the matched-excess CI to clear zero and the final "
+             "chronological tail to remain positive. The tail is a stability diagnostic, "
+             "not untouched rule-development OOS: this is still a current-cohort study; "
+             "sector matching and point-in-time constituents remain future work."]
+    path = _write_oco_audit(lines, market, out_dir)
+    frame.to_csv(os.path.join(out_dir, f"events_{market}_oco_matched.csv"), index=False)
+    return {"n_hits": len(frame), "n_controls": n_controls, "n_weeks": len(weekly),
+            "excess_r": round(point, 4), "ci": [round(lo, 4), round(hi, 4)],
+            "p_le0": round(p_le0, 4), "train_r": round(train, 4),
+            "holdout_r": None if holdout is None else round(holdout, 4),
+            "signal_close_excess_r": (None if close_point is None else round(close_point, 4)),
+            "report": path}
 
 
 def prime_audit(bundle, market="us", bench_daily=None, horizon=63,
@@ -655,11 +871,16 @@ def run_backtest(bundle, market="us", bench_daily=None, horizons=(1, 3, 5, 10),
                  cooldown=10, seed=7, out_dir="backtest", verbose=True,
                  use_candidates=False):
     max_h = max(horizons)
+    # Event generation must leave enough future history for the longest printed
+    # exit template; otherwise late ASX S4 / India S2 events become false time exits.
+    oco_h = max_h if use_candidates else max(
+        max_h, CFG.exit_time_bars,
+        CFG.in_pos_time_bars if market in ("asx", "in") else CFG.s4_time_bars)
     raw, arrs = [], {}
     for tk, (d, wk) in bundle.items():
         try:
-            ev, A = (candidate_events_for_ticker(tk, d, max_h) if use_candidates
-                     else events_for_ticker(tk, d, wk, max_h))
+            ev, A = (candidate_events_for_ticker(tk, d, oco_h) if use_candidates
+                     else events_for_ticker(tk, d, wk, oco_h))
             raw.extend(ev)
             arrs[tk] = A
         except Exception as ex:
@@ -687,7 +908,8 @@ def run_backtest(bundle, market="us", bench_daily=None, horizons=(1, 3, 5, 10),
     # exit policy, not just where price wandered (MAE/MFE).
     for e in events:
         if e["side"] in ("long", "short"):
-            _simulate_oco(e, arrs, market)
+            _simulate_oco(e, arrs, market, entry_mode="next_open",
+                          cost_bps=DEFAULT_OCO_COST_BPS[market])
 
     # baseline: random (ticker, t) from the same universe/date-range
     rng = random.Random(seed)
@@ -802,20 +1024,20 @@ def run_backtest(bundle, market="us", bench_daily=None, horizons=(1, 3, 5, 10),
     # OCO exit-policy realized performance (the test MAE/MFE never gave us)
     lines.append("## OCO exit-policy simulation (realized)")
     lines.append("> Each directional event replayed as the printed bracket: "
-                 "stop k_s x ATR / target k_t x ATR / time exit, entry at signal "
-                 "close, stop wins a both-touched bar. exp_R = mean R-multiple "
-                 "per trade (nets the R:R geometry); positive = the template makes "
-                 "money on this cohort. Same survivor/clustering caveats apply.")
-    lines.append("| rule | n | win% | exp_R | exp_% | tgt/stop/time | avg_bars |")
-    lines.append("|---|---|---|---|---|---|---|")
+                 "stop k_s x ATR / target k_t x ATR / time exit, next-session-open "
+                 f"entry, gap-aware fills and {DEFAULT_OCO_COST_BPS[market]:.0f} bps round-trip cost. "
+                 "Censored paths are excluded. Raw positive expectancy is descriptive only; "
+                 "use --oco-audit for matched selection evidence.")
+    lines.append("| rule | n | censored | win% | exp_R | exp_% | tgt/stop/time | avg_bars |")
+    lines.append("|---|---|---|---|---|---|---|---|")
     for code in sorted({e["signal"] for e in dir_ev}):
         st = _oco_stats([e for e in dir_ev if e["signal"] == code])
         if st:
-            lines.append(f"| {code} | {st['n']} | {st['win%']} | {st['exp_R']} | "
+            lines.append(f"| {code} | {st['n']} | {st['censored']} | {st['win%']} | {st['exp_R']} | "
                          f"{st['exp_%']} | {st['tgt/stop/time']} | {st['avg_bars']} |")
     allst = _oco_stats(dir_ev)
     if allst:
-        lines.append(f"| ALL | {allst['n']} | {allst['win%']} | {allst['exp_R']} | "
+        lines.append(f"| ALL | {allst['n']} | {allst['censored']} | {allst['win%']} | {allst['exp_R']} | "
                      f"{allst['exp_%']} | {allst['tgt/stop/time']} | {allst['avg_bars']} |")
     lines.append("")
 
@@ -859,6 +1081,14 @@ def main():
                     help=f"history window (default {CFG.bt_period}; scan default stays shorter)")
     ap.add_argument("--prime-audit", action="store_true",
                     help="date-matched + block-bootstrap audit of the S4/PRIME claim (writes report_<mkt>_prime.md)")
+    ap.add_argument("--oco-audit", action="store_true",
+                    help="matched-control, next-open OCO audit of S4 selection expectancy")
+    ap.add_argument("--oco-cost-bps", type=float, default=None,
+                    help="round-trip friction for --oco-audit (market default if omitted)")
+    ap.add_argument("--oco-controls", type=int, default=5,
+                    help="nearest same-date non-hit controls per signal hit")
+    ap.add_argument("--oco-bootstrap", type=int, default=2000,
+                    help="moving-block bootstrap replications")
     ap.add_argument("--out", default="backtest")
     a = ap.parse_args()
 
@@ -888,6 +1118,15 @@ def main():
         print("[bt] PRIME audit: date-matched baseline + block bootstrap by date")
         prime_audit(bundle, market=a.market, bench_daily=bench,
                     horizon=max(a.horizons), period=a.period, out_dir=a.out)
+        return
+
+    if getattr(a, "oco_audit", False):
+        print("[bt] matched OCO audit: next-open + gaps + costs + moving blocks")
+        res = oco_matched_audit(
+            bundle, market=a.market, signal="S4", side="long",
+            controls_per_hit=a.oco_controls, cost_bps=a.oco_cost_bps,
+            n_boot=a.oco_bootstrap, out_dir=a.out)
+        print(f"[bt] matched OCO result: {res}")
         return
 
     if a.candidates:

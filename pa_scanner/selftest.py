@@ -494,7 +494,7 @@ def main():
               all(k in r1["events"][0] for k in ("rs_pct", "vol_state", "bench", "mae", "mfe"))
               or r1["events"][0]["side"] == "neutral")
 
-    print("S4 oversold snapback (promoted)")
+    print("S4 oversold snapback (experimental)")
     from .rules import OversoldSnapback
     s4_ok = neutral_ctx(last_close=105.0, atr_last=2.0, sma200=100.0, rsi3=8.0, dn_streak=2)
     r4 = OversoldSnapback().evaluate(s4_ok)
@@ -651,22 +651,24 @@ def main():
     bb=build_board("us","bearish",rws,"RISK_OFF")
     order=[e["code"] for e in bb["entries"]]
     tiers={e["code"]:e["tier"] for e in bb["entries"]}
-    check("board: S4 PREFERRED (not PRIME) even when bench bearish - PRIME retired",
-          order[0] == "S4" and tiers["S4"] == "PREFERRED")
+    check("board: S4 EXPERIMENTAL (not PREFERRED/PRIME) pending matched OCO audit",
+          tiers["S4"] == "EXPERIMENTAL")
     check("board: S1/S2 AVOID when bench bearish", tiers["S1"]=="AVOID" and tiers["S2"]=="AVOID")
     check("board: AVOID rules carry an alternative",
           all(e["alt"] for e in bb["entries"] if e["tier"]=="AVOID"))
     check("board: hit counts attached", {e["code"]:e["hits"] for e in bb["entries"]}["S4"]==10)
     bl=build_board("us","bullish",rws)
     tb={e["code"]:e["tier"] for e in bl["entries"]}
-    check("board: S4 PREFERRED (not PRIME) when bench bullish", tb["S4"]=="PREFERRED")
+    check("board: S4 remains EXPERIMENTAL when bench bullish", tb["S4"]=="EXPERIMENTAL")
     check("board: S1 CONTEXT, S2 CAUTION in US bull", tb["S1"]=="CONTEXT" and tb["S2"]=="CAUTION")
     ib={e["code"]:e["tier"] for e in build_board("in","neutral",rws)["entries"]}
-    check("board: India S2 PREFERRED (position trade)", ib["S2"]=="PREFERRED")
-    check("board: India S1 PREFERRED (exit flags)", ib["S1"]=="PREFERRED")
+    check("board: India S2 EXPERIMENTAL (below promotion bar)", ib["S2"]=="EXPERIMENTAL")
+    check("board: India S1 CONTEXT (bearish exit flag, not rule-wide entry)", ib["S1"]=="CONTEXT")
     check("board: India S3 CONTEXT (no options edge)", ib["S3"]=="CONTEXT")
+    check("board: India S4 CONTEXT after negative matched-OCO holdout", ib["S4"]=="CONTEXT")
     ax={e["code"]:e["tier"] for e in build_board("asx","neutral",rws)["entries"]}
     check("board: ASX S2 CONTEXT (null all horizons)", ax["S2"]=="CONTEXT")
+    check("board: ASX S4 AVOID after negative matched-OCO result and holdout", ax["S4"]=="AVOID")
     check("board: entries ordered by tier then hits",
           all(bb["entries"][i]["tier_rank"]<=bb["entries"][i+1]["tier_rank"]
               for i in range(len(bb["entries"])-1)))
@@ -676,7 +678,7 @@ def main():
         hb=open(_wrb([{"ticker":"A","signal":"S4","side":"long","score":0.6,"rank":9,"last":10,"atr":1}],
                      tdb+"/b.html", market="us",
                      bench={"symbol":"SPY","bias":"bearish","adx":26,"board":bb})).read()
-        check("report embeds board JSON", '"tier"' in hb and "PREFERRED" in hb)
+        check("report embeds board JSON", '"tier"' in hb and "EXPERIMENTAL" in hb)
 
     print("IBKR contract spec + live fail-loud")
     from .config import contract_spec
@@ -737,7 +739,8 @@ def main():
                   res["n_days"] <= res["n_hits"])
 
     print("OCO exit-policy simulator")
-    from .backtest import _simulate_oco, _oco_stats, _template_for
+    from .backtest import (_simulate_oco, _oco_stats, _template_for,
+                           _moving_block_ci, oco_matched_audit)
     check("US S4 template = 2.0/1.5/5", _template_for("S4", "long", "us") == (2.0, 1.5, 5))
     check("ASX S4 template = position 3.5/4.5/63",
           _template_for("S4", "long", "asx") == (3.5, 4.5, 63))
@@ -745,7 +748,7 @@ def main():
           _template_for("S2", "long", "in") == (3.5, 4.5, 63))
 
     def oco_arr(n=310):
-        return {"close": np.full(n, 100.0), "high": np.full(n, 100.5),
+        return {"open": np.full(n, 100.0), "close": np.full(n, 100.0), "high": np.full(n, 100.5),
                 "low": np.full(n, 99.5), "atr": np.full(n, 2.0)}
     t = 300
     A = oco_arr(); A["high"][t + 1] = 104.0; A["low"][t + 1] = 95.0
@@ -763,13 +766,57 @@ def main():
     _simulate_oco(e3, {"X": A3}, "us")
     check("OCO: clean target = +0.75R (1.5/2.0 geometry)",
           e3["oco_outcome"] == "target" and e3["oco_r"] == 0.75 and e3["oco_bars"] == 3)
-    A4 = oco_arr()   # nothing touched -> time exit at flat close
+    A4 = oco_arr()   # incomplete 10-bar horizon -> censored, never early time exit
     e4 = {"ticker": "X", "t": t, "side": "long", "signal": "S2"}
     _simulate_oco(e4, {"X": A4}, "us")
-    check("OCO: untouched -> time exit", e4["oco_outcome"] == "time")
-    st = _oco_stats([e, e2, e3, e4])
+    check("OCO: incomplete untouched path -> right-censored",
+          e4["oco_outcome"] == "censored" and e4.get("oco_r") is None)
+    A5 = oco_arr(312)
+    e5 = {"ticker": "X", "t": t, "side": "long", "signal": "S2"}
+    _simulate_oco(e5, {"X": A5}, "us")
+    check("OCO: complete untouched path -> time exit", e5["oco_outcome"] == "time")
+    A6 = oco_arr(312); A6["open"][t + 2] = 94.0
+    A6["high"][t + 2] = 95.0; A6["low"][t + 2] = 93.0
+    e6 = {"ticker": "X", "t": t, "side": "long", "signal": "S2"}
+    _simulate_oco(e6, {"X": A6}, "us")
+    check("OCO: gap through stop fills at open, worse than -1R",
+          e6["oco_outcome"] == "stop" and e6["oco_r"] == -1.5)
+    e7 = {"ticker": "X", "t": t, "side": "long", "signal": "S2"}
+    _simulate_oco(e7, {"X": A5}, "us", cost_bps=10)
+    check("OCO: round-trip friction deducted", e7["oco_r"] < 0 and e7["oco_pct"] == -0.1)
+    A8 = oco_arr(312); A8["high"][t] = 110.0; A8["low"][t] = 90.0
+    e8 = {"ticker": "X", "t": t, "side": "long", "signal": "S2"}
+    _simulate_oco(e8, {"X": A8}, "us", entry_mode="signal_close")
+    check("OCO: signal-close sensitivity never uses signal-bar high/low",
+          e8["oco_outcome"] == "time")
+    st = _oco_stats([e, e2, e3, e4, e5])
     check("OCO stats aggregate win%/exp_R",
-          st["n"] == 4 and "exp_R" in st and st["win%"] == 25.0)
+          st["n"] == 4 and st["censored"] == 1 and "exp_R" in st and st["win%"] == 25.0)
+    mb = _moving_block_ci([1.0, 1.0, 1.0, 1.0], 2, n_boot=50)
+    check("moving-block bootstrap preserves a constant positive series",
+          mb == (1.0, 1.0, 0.0))
+
+    # Two flushed names plus four untriggered uptrends provide same-date controls.
+    control_bundle = {f"H{i}": (_flushframe(seed=i), dl.to_weekly(_flushframe(seed=i)))
+                      for i in range(2)}
+    for i in range(4):
+        fr = _flushframe(seed=20 + i, offsets=())
+        control_bundle[f"C{i}"] = (fr, dl.to_weekly(fr))
+    with _tf.TemporaryDirectory() as otd:
+        ores = oco_matched_audit(control_bundle, market="us", n_boot=100,
+                                 controls_per_hit=3, out_dir=otd)
+        check("matched OCO audit produces hit/control comparisons and report",
+              ores.get("n_hits", 0) > 0 and ores.get("n_controls", 0) > 0
+              and os.path.exists(ores["report"]))
+
+    from .cli import _live_failure_reason
+    check("US live health reports TWS fallback as a hard connection failure",
+          _live_failure_reason({"connected": False, "fresh": 0, "total": 4})
+          == "TWS not connected")
+    dash = open(os.path.join(os.path.dirname(__file__), "..", "docs", "index.html"),
+                encoding="utf-8").read()
+    check("dashboard: bearish stand-down banner is not hidden by note fallback",
+          'else if(!(d.bench && d.bench.bias==="bearish"))' in dash)
 
     print("ledger robustness (atomic / corrupt / stale-drop)")
     from .ledger import _load as _lload, _save as _lsave, update_ledger as _upd

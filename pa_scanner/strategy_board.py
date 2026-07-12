@@ -5,16 +5,17 @@ market-wide conditioner used is the benchmark regime (the validated
 stand-down axis; PRIME retired by the date-matched audit); the rest is each rule's validation status in the
 given market. This is a display layer - it does not change per-ticker scoring.
 
-Tiers (high -> low): PRIME, PREFERRED, CONTEXT, CAUTION, AVOID.
+Tiers (high -> low): PRIME, PREFERRED, EXPERIMENTAL, CONTEXT, CAUTION, AVOID.
 """
 from collections import Counter
 
 TIERS = {
     "PRIME":     (0, "#f0c000", "top attention/ordering - NOT a sizing signal"),
     "PREFERRED": (1, "#3fb950", "favoured"),
-    "CONTEXT":   (2, "#8b949e", "ideas only, no measured entry edge"),
-    "CAUTION":   (3, "#d29922", "usable with a caveat"),
-    "AVOID":     (4, "#f85149", "negative in this regime"),
+    "EXPERIMENTAL": (2, "#58a6ff", "forward-track; matched edge not established"),
+    "CONTEXT":   (3, "#8b949e", "ideas only, no measured entry edge"),
+    "CAUTION":   (4, "#d29922", "usable with a caveat"),
+    "AVOID":     (5, "#f85149", "negative in this regime"),
 }
 
 NAMES = {"S1": "Reversal at level", "S2": "Pullback breakout",
@@ -31,8 +32,12 @@ def _assess(code, market, bearish):
         from .config import CFG as _C
         if _C.s4_prime and market in ("us", "asx") and bearish:
             return ("PRIME", "s4_prime re-enabled by config (run --prime-audit to justify)", None)
-        return ("PREFERRED", "only rule with positive realized OCO expectancy "
-                "(US +0.05R/trade pre-cost); bearish-regime 'supercharge' retired by audit", None)
+        if market == "us":
+            return ("EXPERIMENTAL", "matched OCO near-miss: +0.015R, CI [-0.005,+0.036]; "
+                    "positive holdout but not promoted", None)
+        if market == "asx":
+            return ("AVOID", "matched OCO failed: -0.046R; final holdout -0.166R", "stand aside")
+        return ("CONTEXT", "matched OCO did not promote: CI crosses zero and final holdout is negative", None)
 
     if code == "S3":
         if market == "us":
@@ -41,14 +46,14 @@ def _assess(code, market, bearish):
 
     if code == "S1":
         if market == "in":
-            return ("PREFERRED", "EXIT flags validated (t=3.0); entries are context", None)
+            return ("CONTEXT", "bearish S1 is an exit/risk flag; this rule-wide card is not an entry signal", None)
         if bearish:
             return ("AVOID", "trend entries stand down (-0.6% to -2.5% excess, t=-4.0)", "S4 snapbacks")
         return ("CONTEXT", "no measured directional alpha; candidate ideas only", None)
 
     if code == "S2":
         if market == "in":
-            return ("PREFERRED", "validated 6-13wk position trade (+0.95-1.14% @42-63d)", None)
+            return ("EXPERIMENTAL", "suggestive 6-13wk long result, but below the registered promotion bar", None)
         if bearish:
             return ("AVOID", "trend entries stand down (-0.6% to -2.5% excess, t=-4.0)", "S4 snapbacks")
         if market == "asx":

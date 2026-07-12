@@ -121,7 +121,7 @@ class Config:
     earnings_warn_days: int = 10       # directional: <= this many days = warn
     s3_earnings_tenor: int = 60        # S3 premium: earnings must clear the whole 30-60 DTE window
 
-    # --- S4: oversold snapback (promoted candidate OSMR; US 5d t=3.44, ASX t=2.13) ---
+    # --- S4: oversold snapback (EXPERIMENTAL; promotion-era edge did not replicate) ---
     s4_rsi_max: float = 15.0           # RSI(3) must be below this
     s4_streak_min: int = 4             # alt trigger (round-2 STRK4: US t=3.17, ASX t=2.73)
     s4_time_bars: int = 5              # US edge decays past ~10d; ASX S4 uses the position template
