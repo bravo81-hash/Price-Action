@@ -124,6 +124,11 @@ Green = BUY/HOLD · amber = REDUCE/AVOID/WATCH · red = **EXIT**. Conservative b
 design: a bullish reversal inside a downtrend is WATCH, not BUY, because these
 names can't be hedged. The **Exit / Trim** filter isolates the get-out names.
 
+**Evidence gate:** the technical matrix cannot create entry authority. Only
+PRIME/PREFERRED rows retain BUY/HOLD. EXPERIMENTAL, CONTEXT and CAUTION entries
+become WATCH; AVOID remains AVOID. Technical REDUCE/EXIT warnings stay visible
+with their evidence tier. Qty is emitted only for an evidence-authorized BUY.
+
 This is a **screen**, not position-aware: it flags any constituent firing an
 exit/avoid setup; cross-reference your own holdings (ASX via TWS, India via your
 NSE broker). Universes are curated ~100-name index lists (ASX 50 + mid-caps;
@@ -179,10 +184,10 @@ Honest positioning after 59k backtested events across all three markets:
   but the conclusion stands. The bench-bearish stand-down strengthens with
   horizon (-2.45% @63d, t=-4.5). S3 quiet-name selection persists to 63d
   (11.3% vs 12.7% baseline abs move). Quietness-persistence SCREEN, not a validated option edge - the harness shows the underlying stays quiet, not that a condor/calendar is profitable. 30-60 DTE is a sensible pairing; option expectancy is untested.
-- **India: S2 BUYs are 6-13 week position trades** (+0.95-1.14% excess at
-  42-63d, t~1.8-2.3, favorable MAE/MFE skew). These rows carry the POSITION
-  exit template: stop 3.5xATR / target 4.5xATR / 63-bar time exit
-  (`in_pos_*` knobs). India exit flags strengthen at 63d - treat as
+- **India: S2-long is an experimental 6-13 week candidate** (+0.95-1.14%
+  excess at 42-63d, t~1.8-2.3), below the promotion bar. Its 3.5xATR / 4.5xATR /
+  63-bar policy remains research context; rows are WATCH with no Qty pending
+  matched validation. India S1 bearish exit flags strengthen at 63d - treat as
   underweight-for-months, not a short-term trim.
 - **ASX: null at every horizon** - remains a candidate screen on the 10-bar
   swing template.
@@ -293,13 +298,13 @@ and raw `events_<mkt>.csv`.
 
 ## S4 — Oversold snapback (experimental / forward-track)
 
-Live in all markets as an **experimental, long-only** screen above the 200SMA,
+Live in all markets as a **market-specific, long-only** screen above the 200SMA,
 with two former promotion triggers: **RSI(3) < 15 with a 2+ down-close streak**
 (promotion-era discovery stats: US 5d +0.38% t=3.44, ASX t=2.13 — DID NOT
 replicate on the refreshed 2026 cohort: ~0 excess at every horizon in every
 trigger cell, robust to cooldown 10/21. The old +0.05R pre-cost OCO result was
-raw policy expectancy, not selection alpha; S4 remains forward-track pending
-the matched, costed `--oco-audit`. RSI(3) beat the RSI(2) textbook
+raw policy expectancy, not selection alpha. The matched audit leaves US S4
+EXPERIMENTAL, ASX S4 AVOID and India S4 CONTEXT. RSI(3) beat the RSI(2) textbook
 variant in the US parameter test) **or a 4+ consecutive-down-close flush**
 (round 2 STRK4: US t=3.17, ASX t=2.73, ASX persistence 21–63d;
 `s4_streak_min`). Exits: US 5-bar time exit (`s4_time_bars`) with 2.0/1.5 ATR;
@@ -343,8 +348,8 @@ to slower, next-bar-open backtests.
 `pa_scanner/strategy_board.py` ranks the four live rules by conviction for the
 day and renders as cards above the table (report + dashboard, click a card to
 filter). Every tier is keyed to a backtest finding, conditioned on the
-benchmark regime: **PREFERRED** (validated edge active: S3 premium, India
-S2 position, India S1 exits), **CONTEXT** (no measured entry edge), **CAUTION**
+benchmark regime: **PREFERRED** (promotion bar cleared), **EXPERIMENTAL**
+(forward-track only), **CONTEXT** (no measured entry edge), **CAUTION**
 (usable with a caveat, e.g. US S2 <=21d), **AVOID** (S1/S2 during a
 bench-bearish stand-down - card names the alternative). Order reshuffles with
 the regime; hit counts show the day's signal volume per rule.
@@ -375,7 +380,8 @@ defaults **False** (plumbing kept; re-enable only for a market whose own
 prime-audit CI clears zero). The S4 index-penalty exemption, which rested on
 the same cell, is also removed. The old OCO simulation showed +0.053R/trade
 pre-cost, but that result is not a promotion claim: it used no matched control,
-signal-close fills and no costs. S4 is EXPERIMENTAL until `--oco-audit` clears.
+signal-close fills and no costs. The matched audit subsequently set US S4 to
+EXPERIMENTAL, ASX S4 to AVOID and India S4 to CONTEXT.
 
 **Forward ledger:** each scan appends its hits to
 `docs/data/ledger_<mkt>.json` (entry = signal close, exits from the row's
@@ -402,11 +408,11 @@ high + volume), **HVOL** (>=3x-volume day premium, both sides), **GAPD**
 (>=1-ATR gap held into the close, PEAD proxy, both sides), **OSMR** (RSI(3)
 oversold snapback above the 200SMA), **PBEMA** (6-month momentum leader, first
 20-EMA touch). Promotion bar (pre-registered): |t| >= 2.5 at two adjacent
-horizons with consistent sign, or >= 2.0 replicated across US and ASX. Round-1 verdicts (5y, side-matched): **OSMR promoted -> live rule S4** (2026 replication: selection excess ~0 in all trigger cells; retained on realized OCO expectancy only);
+horizons with consistent sign, or >= 2.0 replicated across US and ASX. Round-1 originally promoted OSMR, but the 2026 replication found ~0 selection excess and the matched OCO audit did not promote any market;
 PBEMA near-miss (US 63d t=2.33, ASX 1.65) parked for out-of-sample re-test;
 NH52/HVOL/GAPD failed and were deleted; all candidate shorts harmful (US t=-3.9).
 
-**Round 2 (settled)**: STRK4 promoted and folded into S4 as a second trigger;
+**Round 2 (settled)**: STRK4 was folded into S4 during discovery, but the refreshed trigger cells did not replicate;
 OSMR2 settled the parameter test (RSI(2) lost to RSI(3) in the US);
 LO7/BBMR/IBSMR failed and were deleted. CANDIDATES is now empty; PBEMA stays
 parked for an out-of-sample re-test. The Pine companion (`pa_confirm.pine`,

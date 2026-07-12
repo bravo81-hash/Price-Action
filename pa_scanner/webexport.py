@@ -17,8 +17,9 @@ from .config import MARKETS
 
 def _row(r: dict) -> dict:
     d = {k: r.get(k) for k in
-         ("ticker", "signal", "signal_name", "side", "score", "rank", "prime", "last", "atr", "atr_pct",
-          "rs", "rs_pct", "age", "ern", "ern_status", "stop", "tgt", "time_exit", "label", "level",
+          ("ticker", "signal", "signal_name", "side", "score", "rank", "prime", "last", "atr", "atr_pct",
+           "rs", "rs_pct", "age", "ern", "ern_status", "stop", "tgt", "time_exit", "label", "level",
+           "qty", "evidence_tier", "evidence_reason", "evidence_rank",
           # options (US) fields
           "regime", "regime_adx", "align", "vol_state", "vol_src", "cell", "structure",
           "ivr", "iv", "rv", "vrp", "term", "live", "live_status", "live_dist",
@@ -33,6 +34,10 @@ def _row(r: dict) -> dict:
         d["detail"] = f"pullback {r.get('pullback_pct', '')}%"
         d["dist"] = r.get("breakout_atr", "")
         d["volx"] = r.get("volx", "")
+    elif r.get("signal") == "S4":
+        d["detail"] = r.get("label", "")
+        d["dist"] = r.get("dist_atr", "")
+        d["volx"] = ""
     else:  # S3 range / chop
         d["detail"] = r.get("label", "")
         d["dist"] = ""
@@ -80,7 +85,9 @@ def write_web(rows, out_dir="docs", scanned=0, universe=0, keep=60, note=None, m
         dated = glob.glob(os.path.join(data_dir, f"20*{suffix}.json"))
     for old in sorted(dated)[:-keep]:
         os.remove(old)
-    keep_dates = sorted(dated, reverse=True)
+    # Build the index from files that still exist after retention; the old code
+    # listed just-deleted snapshots until the following scan.
+    keep_dates = sorted((f for f in dated if os.path.exists(f)), reverse=True)
     n = len(suffix) + 5  # strip "<suffix>.json"
     snapshots = [os.path.basename(f)[:-n] for f in keep_dates]
     with open(os.path.join(data_dir, f"index{suffix}.json"), "w", encoding="utf-8") as f:

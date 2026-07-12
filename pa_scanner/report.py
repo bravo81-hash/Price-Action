@@ -171,7 +171,7 @@ const MODE = "__MODE__";        // "options" | "directional"
 const TVP  = "__TV__";          // TradingView exchange prefix, "" for US
 const ERNWARN = __ERNWARN__;
 const BOARD = __BOARD__;
-let view = ROWS.slice(), sortK = "rank", sortDir = -1, filt = "all", q = "";
+let view = ROWS.slice(), sortK = "evidence_rank", sortDir = 1, filt = "all", q = "";
 const $ = s => document.querySelector(s);
 function dispSym(t){ return MODE==="options" ? t : t.replace(/\\.(AX|NS)$/,''); }
 function tvSym(t){ return TVP ? (TVP+":"+dispSym(t)) : t; }
@@ -237,6 +237,11 @@ function actionCell(r){
   const note=r.action_note? ` <span class="src">${r.action_note}</span>`:'';
   return `<b style="color:${c}">${r.action||''}</b>${note}`;
 }
+function evidenceCell(r){
+  if(!r.evidence_tier) return "";
+  const T={PRIME:'#f0c000',PREFERRED:'#3fb950',EXPERIMENTAL:'#58a6ff',CONTEXT:'#8b949e',CAUTION:'#d29922',AVOID:'#f85149'};
+  return `<b style="color:${T[r.evidence_tier]||'#c9d1d9'}" title="${r.evidence_reason||''}">${r.evidence_tier}</b>`;
+}
 function trendCell(r){
   const T={up:'#3fb950',flat:'#8b949e',down:'#f85149'};
   return `<span style="color:${T[r.trend]||'#c9d1d9'}">${(r.trend||'').toUpperCase()}</span> <span class="src">ADX ${r.trend_adx??''}</span>`;
@@ -251,6 +256,7 @@ const COLS = {
  options:[
   {k:"ticker",l:"Ticker",cell:tickCell},
   {k:"signal",l:"Sig",cell:sigCell},
+  {k:"evidence_rank",l:"Evidence",cell:evidenceCell},
   {k:"side",l:"Side",cell:sideCell},
   {k:"rank",l:"Rank",cls:"num"},
   {k:"rs_pct",l:"RS",cls:"num",cell:rsCell},
@@ -277,6 +283,7 @@ const COLS = {
  directional:[
   {k:"ticker",l:"Ticker",cell:tickCell},
   {k:"action",l:"Action",cell:actionCell},
+  {k:"evidence_rank",l:"Evidence",cell:evidenceCell},
   {k:"signal",l:"Sig",cell:sigCell},
   {k:"rank",l:"Rank",cls:"num"},
   {k:"rs_pct",l:"RS",cls:"num",cell:rsCell},
@@ -298,7 +305,7 @@ const COLS = {
 };
 
 /* ---------- prefs: order / hidden / widths, persisted per layout ---------- */
-function prefKey(){return "paCols."+MODE;}
+function prefKey(){return "paCols.v2."+MODE;}
 let prefs={order:null,hidden:[],widths:{}};
 function loadPrefs(){
   try{const p=JSON.parse(localStorage.getItem(prefKey()));if(p)prefs={order:p.order||null,hidden:p.hidden||[],widths:p.widths||{}};}catch(e){}
@@ -325,7 +332,7 @@ function buildHead(){
     if(prefs.widths[c.k]) th.style.width=prefs.widths[c.k]+"px";
     th.style.position="sticky";
     if(!c.nosort) th.onclick=()=>{ if(sortK===c.k) sortDir*=-1;
-      else {sortK=c.k; sortDir=["ticker","detail","side","action","trend","trigger"].includes(c.k)?1:-1;} render(); };
+      else {sortK=c.k; sortDir=["ticker","detail","side","action","trend","trigger","evidence_rank"].includes(c.k)?1:-1;} render(); };
     th.draggable=true;
     th.ondragstart=e=>{dragK=c.k; e.dataTransfer.setData("text/plain",c.k);};
     th.ondragover=e=>e.preventDefault();
@@ -403,8 +410,8 @@ $("#q").oninput=e=>{q=e.target.value.trim().toLowerCase(); render();};
 $("#colsBtn").onclick=()=>{const p=$("#colPanel"); p.style.display=(p.style.display==="block")?"none":"block";};
 $("#csv").onclick=()=>{
   const cols = MODE==="directional"
-    ? ["ticker","action","action_note","trend","trend_adx","signal","trigger","side","rank","score","prime","last","live","live_status","live_dist","atr","atr_pct","rs","rs_pct","level","dist","age","stop","tgt","time_exit","qty","detail","label"]
-    : ["ticker","signal","side","rank","score","prime","last","live","live_status","live_dist","level","dist","age","stop","tgt","time_exit","qty","detail","volx","atr","atr_pct","rs","rs_pct","ern",
+    ? ["ticker","action","action_note","evidence_tier","evidence_reason","evidence_rank","trend","trend_adx","signal","trigger","side","rank","score","prime","last","live","live_status","live_dist","atr","atr_pct","rs","rs_pct","level","dist","age","stop","tgt","time_exit","qty","detail","label"]
+    : ["ticker","signal","evidence_tier","evidence_reason","evidence_rank","side","rank","score","prime","last","live","live_status","live_dist","level","dist","age","stop","tgt","time_exit","qty","detail","volx","atr","atr_pct","rs","rs_pct","ern",
        "regime","regime_adx","align","vol_state","vol_src","cell","structure","ivr","iv","rv","vrp","term","opt_liq","opt_oi","opt_spread","label"];
   const head=cols.join(",");
   const lines=view.map(r=>cols.map(c=>{

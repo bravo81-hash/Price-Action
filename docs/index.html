@@ -128,7 +128,7 @@ markets. Full per-slice tables live in <code>backtest/report_&lt;mkt&gt;.md</cod
 <div class="card"><b class="mkt">India</b> — the strongest directional result in the study.
 <ul>
 <li><span class="pos">S1 bearish EXIT flags are validated</span>: +0.54% excess at 10d (t=2.99), strengthening to +1.07% at 63d (t=1.92) — treat as underweight-for-months, not a short-term trim.</li>
-<li><span class="pos">S2 BUY (long) is a 6–13 week position trade</span>: +0.95–1.14% excess at 42–63d (t≈1.8–2.3), favorable skew (med MAE −7.9% / med MFE +9.6%). These rows use the <b>position exit template</b> — stop 3.5×ATR, target 4.5×ATR, 63-bar time exit.</li>
+<li><span class="neu">S2-long is an experimental 6–13 week candidate</span>: +0.95–1.14% excess at 42–63d (t≈1.8–2.3), below the registered promotion bar. The historical 3.5×ATR / 4.5×ATR / 63-bar template is research context, not BUY authority; matched OCO validation is still required.</li>
 <li>Everything else (S1 longs, S2 shorts) keeps the standard 10-bar swing template.</li>
 </ul></div>
 
@@ -141,11 +141,11 @@ markets. Full per-slice tables live in <code>backtest/report_&lt;mkt&gt;.md</cod
 <div class="card"><b class="mkt">Candidate study</b> — five documented-anomaly setups tested
 (promotion bar pre-registered: |t|≥2.5 at two adjacent horizons, or ≥2.0 replicated US+ASX):
 <ul>
-<li><span class="neu">OSMR → experimental live rule S4</span>: oversold snapback in uptrend. Promotion-era discovery stats: US 5d excess +0.38% (t=3.44), ASX +0.34% (t=2.13). <b>2026 replication update</b>: on the refreshed 5y cohort the selection excess is ~0 at every horizon in every trigger cell (5d: rsi-only −0.03%, streak-only +0.05%, |t|&lt;0.5; robust to cooldown 10 vs 21). The old +0.05R result was raw, pre-cost bracket expectancy—not a validated selection edge. S4 now remains EXPERIMENTAL pending the matched, costed <code>--oco-audit</code>.</li>
+<li><span class="neu">OSMR → market-specific evidence</span>: promotion-era discovery stats did not replicate. The matched, costed <code>--oco-audit</code> leaves US S4 EXPERIMENTAL, marks ASX S4 AVOID, and India S4 CONTEXT. The old +0.05R result was raw pre-cost bracket expectancy, not selection alpha.</li>
 <li><span class="neu">PBEMA near-miss</span> (US 63d t=2.33, ASX 1.65 — below bar): parked in candidates.py for a future out-of-sample re-test.</li>
 <li><span class="neg">NH52, HVOL, GAPD failed</span>; candidate shorts were harmful everywhere (US all-shorts t=−3.9) — no short setups added.</li>
 <li>RS≥70 conditioning replicated in both markets (t=2.26 / 1.96), reinforcing the RS layer.</li>
-<li><b>Round 2 (OSMR family)</b>: STRK4 (4+ down closes) cleared the bar (US 5d t=3.17, ASX t=2.73 + ASX 21–63d persistence) and was folded into S4 as a second trigger. OSMR2 settled the parameter test — RSI(2) lost to RSI(3) in the US, so S4 keeps RSI(3)&lt;15. LO7/BBMR/IBSMR failed. The raw bearish-regime slices (US +5.57% @63d t=9.37, ASX +4.09% t=6.96) were later <b>retired by the PRIME audit</b> — date-matched + block-bootstrapped they collapse to US −0.36% (CI [−3.60,+3.11], 94 days) and ASX −0.24% (CI [−2.10,+1.72], 95 days), both p≈0.60: date effect × clustering, not selection edge. ASX MR excess grows with horizon (→ ASX S4 position template); high <b>realized</b>-vol names snapped hardest (t=2.86/5.65) — realized-vol rank, not implied vol / IVR.</li>
+<li><b>Round 2 (OSMR family)</b>: STRK4 was folded into S4 during discovery, but neither trigger cell replicated on the refreshed cohort. PRIME was retired after date matching and clustered inference; the later matched OCO audit also rejected the ASX 63-bar policy (−0.046R, final tail −0.166R). Keep the trigger definitions frozen for forward tracking—do not retune them to recover significance.</li>
 </ul></div>
 
 <div class="card"><b class="mkt">PRIME audit</b> — <code>--prime-audit</code> re-tests the S4/PRIME "+5.6% @63d" claim honestly: a <b>date-matched</b> baseline (each hit vs all longs available that same day, subtracting "stocks bounce on down days") and a <b>block bootstrap by date</b> (each selloff = one independent observation, not N clustered hits). Reports the corrected mean excess, a bootstrap 95% CI, and p(excess≤0). If the CI straddles 0, PRIME is attention/ordering only — never a sizing signal.</div>
@@ -156,7 +156,7 @@ markets. Full per-slice tables live in <code>backtest/report_&lt;mkt&gt;.md</cod
 
 <div class="card"><b>Kept vs. changed</b> (round-1 and round-2 decisions from the 2y and 5y runs):
 <ul>
-<li><b>Kept:</b> S1 shorts (2y "collapse" was baseline drift, not a real effect — 5y side-matched shows |t|&lt;0.8); India S2 (null, not negative — still generates candidates); score/rank as organizers.</li>
+<li><b>Kept:</b> S1/S2 as candidate/context screens, India S1 bearish events as exit flags, India S2-long as EXPERIMENTAL, and score/rank as organizers—not confidence estimates.</li>
 <li><b>Changed:</b> <code>s2_max_age</code> 2→1 (age-2 entries negative in US+ASX); evening_star retired; side-matched baselines replace the original mixed baseline; exit templates (Stop/Tgt/time_exit columns) added from MAE/MFE distributions; India S2-long position template added from the horizon study.</li>
 <li><b>Rejected:</b> full score-weight rebuild (deciles flat over 5y — nothing stable to fit); fundamentals in scoring (no point-in-time history available via yfinance → unvalidatable, display-only if ever added).</li>
 </ul></div>
@@ -217,11 +217,9 @@ aside while it's showing.</li>
 </table>
 <p>Green = add/hold long · amber = reduce/avoid/watch · red = <b>EXIT</b>. Conservative by
 design — a bullish reversal inside a downtrend is WATCH, not BUY.</p>
+<p><b>Evidence gate:</b> this technical matrix cannot create entry authority. PREFERRED/PRIME rows may retain BUY/HOLD; EXPERIMENTAL/CONTEXT/CAUTION entries become WATCH; AVOID entries remain AVOID. Technical REDUCE/EXIT warnings remain visible with their evidence tier.</p>
 <ul>
-<li><b>India:</b> EXIT/REDUCE flags are backtest-validated (strengthen with horizon — treat as
-underweight-for-months once triggered). S2 BUY rows carry the <b>position</b> exit template
-(stop 3.5×ATR / target 4.5×ATR / 63-bar time exit) — these are the app's one confirmed
-multi-week directional edge.</li>
+<li><b>India:</b> bearish S1 events retain EXIT/REDUCE authority. S2-long is EXPERIMENTAL and therefore WATCH-only; its 3.5×ATR / 4.5×ATR / 63-bar template remains research context pending matched validation.</li>
 <li><b>ASX:</b> no measured timing edge at any horizon — treat hits as a curated watchlist,
 cross-reference your own TWS holdings before acting (this is a screen, not position-aware).</li>
 </ul>
@@ -245,7 +243,7 @@ MAE/MFE distributions:</p>
 <ul>
 <li><b>Standard (swing) template</b> — all US/ASX hits, and India S1/S2-short: stop 2.0×ATR,
 target 1.5×ATR, 10-bar time exit.</li>
-<li><b>India S2-long (position) template</b> — stop 3.5×ATR, target 4.5×ATR, 63-bar time exit.</li>
+<li><b>India S2-long research template</b> — stop 3.5×ATR, target 4.5×ATR, 63 bars; no Qty or BUY until promotion.</li>
 <li><b>S3 (neutral)</b> — stop/target show the range low/high as condor short-strike references.</li>
 </ul>
 
@@ -259,12 +257,12 @@ target 1.5×ATR, 10-bar time exit.</li>
 <li><b>Filters:</b> counter-trend reversals score down; skip US names with earnings ≤ 10d for premium structures; obey the STAND-DOWN banner.</li>
 </ul></div>
 
-<div class="card"><b class="mkt">S2 — Trend pullback breakout</b> (all markets · long &amp; short · <span class="neu">context in US/ASX; India longs validated at 42–63d</span>)
+<div class="card"><b class="mkt">S2 — Trend pullback breakout</b> (all markets · long &amp; short · <span class="neu">context in US/ASX; India longs EXPERIMENTAL at 42–63d</span>)
 <ul>
 <li><b>Setup:</b> weekly EMA10 &gt; EMA30 and rising (mirror for shorts), with a pullback that touched the daily EMA20 within the last 10 bars; close back on the trend side of the EMA20.</li>
 <li><b>Entry:</b> daily close breaks the prior-7-day Donchian band, cross ≤ 1 bar old (<b>Age</b> column), extension ≤ 1.5×ATR past the trigger, breakout-bar volume ≥ 1.0× the prior-20 average. Enter at the close.</li>
 <li><b>SL:</b> 2.0×ATR. <b>PT:</b> 1.5×ATR. <b>Time exit:</b> 10 bars.</li>
-<li><b>India S2 BUY (position trade):</b> SL 3.5×ATR · PT 4.5×ATR · time exit <b>63 bars</b> — the app prints these on the row.</li>
+<li><b>India S2-long research policy:</b> SL 3.5×ATR · PT 4.5×ATR · 63 bars. Row action is WATCH and Qty is suppressed until matched validation promotes it.</li>
 <li><b>US cap:</b> never extend a directional S2 hold past ~21 days (42–63d excess is significantly negative).</li>
 </ul></div>
 
@@ -334,13 +332,12 @@ rule.</p>
 stand-down). The card names the better alternative to use instead.</li>
 </ul>
 <p>The order reshuffles daily with the benchmark regime: in bearish conditions S1/S2 drop to AVOID;
-S4 remains EXPERIMENTAL in every regime until its matched OCO audit clears. Hit counts show how many
+US S4 remains EXPERIMENTAL; ASX S4 is AVOID and India S4 is CONTEXT. Hit counts show how many
 signals each rule actually produced today.</p>
 
 <h2>Columns (time-pressed workflow)</h2>
-<p>Columns are ordered left-to-right by <b>signal-quality weight</b> by default — the validated
-reads come first (Rank, RS, Vol-state, earnings/age gates), then execution levels
-(Stop/Tgt/Qty), then context. The default sort is <b>Rank</b>. Time-pressed: tap a strategy chip
+<p>Columns are ordered left-to-right by decision priority. <b>Evidence</b> sits beside Action/Sig and governs entry authority; Rank and RS organize candidates, followed by execution levels
+(Stop/Tgt/Qty) and context. Qty appears only for a PREFERRED/PRIME BUY. The default sort is <b>Rank</b>. Time-pressed: tap a strategy chip
 (e.g. <b>S4</b>), and the top rows are that rule's best candidates with everything actionable in
 the first screen-width.</p>
 <ul>
@@ -351,7 +348,7 @@ the first screen-width.</p>
 <li>Preferences persist per layout (US options vs ASX/India directional) in your browser.</li>
 </ul>
 <p>Note: TWS enrichment (IVR/IV/OI/spread) targets the <b>highest-quality rows first</b> —
-PRIME and top-score signals are enriched before the pacing budget is spent, so the rows you act
+PREFERRED evidence rows are enriched before experimental/context rows and then ordered by score, so the pacing budget reaches the rows with entry authority first. The rows you act
 on are the ones with full data.</p>
 
 <h2>Running a scan</h2>
@@ -370,7 +367,7 @@ S4 reclaimed/below-MA, S1 at-level); India is EOD-only (separate broker, no TWS)
 const $ = s => document.querySelector(s);
 const SUF = {us:"", asx:"_asx", in:"_in"};
 const LABEL = {us:"US", asx:"ASX", in:"India"};
-let ROWS=[], view=[], sortK="rank", sortDir=-1, filt="all", q="", BOARD=null;
+let ROWS=[], view=[], sortK="evidence_rank", sortDir=1, filt="all", q="", BOARD=null;
 let market="us", MODE="options", TVP="";
 const ERNWARN = 10;
 
@@ -403,6 +400,7 @@ function buildCols(){
    options:[
     {k:"ticker",l:"Ticker",cell:r=>`<b>${dispSym(r.ticker)}</b>`},
     {k:"signal",l:"Sig",cell:sigCell},
+    {k:"evidence_rank",l:"Evidence",cell:evidenceCell},
     {k:"side",l:"Side",cell:r=>`<span class="${r.side}">${r.side}</span>`},
     {k:"rank",l:"Rank",cls:"num"},
     {k:"rs_pct",l:"RS",cls:"num",cell:rsCell},
@@ -429,6 +427,7 @@ function buildCols(){
    directional:[
     {k:"ticker",l:"Ticker",cell:r=>`<b>${dispSym(r.ticker)}</b>`},
     {k:"action",l:"Action",cell:actionCell},
+    {k:"evidence_rank",l:"Evidence",cell:evidenceCell},
     {k:"signal",l:"Sig",cell:sigCell},
     {k:"rank",l:"Rank",cls:"num"},
     {k:"rs_pct",l:"RS",cls:"num",cell:rsCell},
@@ -452,7 +451,7 @@ function buildCols(){
 function sigCell(r){return `<span class="tag ${r.prime?"prime":String(r.signal).toLowerCase()}">${r.signal}${r.prime?"\u2605":""}</span>`;}
 function tvCell(r){return `<a href="https://www.tradingview.com/chart/?symbol=${encodeURIComponent(tvSym(r.ticker))}" target="_blank">TV</a>`;}
 
-function prefKey(){return "paCols."+MODE;}
+function prefKey(){return "paCols.v2."+MODE;}
 function loadPrefs(){ prefs={order:null,hidden:[],widths:{}};
   try{const p=JSON.parse(localStorage.getItem(prefKey()));if(p)prefs={order:p.order||null,hidden:p.hidden||[],widths:p.widths||{}};}catch(e){} }
 function savePrefs(){try{localStorage.setItem(prefKey(),JSON.stringify(prefs));}catch(e){}}
@@ -474,7 +473,7 @@ function buildHead(){
     if(c.cls) th.className=c.cls;
     if(prefs.widths[c.k]) th.style.width=prefs.widths[c.k]+"px";
     if(!c.nosort) th.onclick=()=>{ if(sortK===c.k) sortDir*=-1;
-      else {sortK=c.k; sortDir=["ticker","detail","side","action","trend","trigger"].includes(c.k)?1:-1;} render(); };
+      else {sortK=c.k; sortDir=["ticker","detail","side","action","trend","trigger","evidence_rank"].includes(c.k)?1:-1;} render(); };
     th.draggable=true;
     th.ondragstart=e=>{dragK=c.k;};
     th.ondragover=e=>e.preventDefault();
@@ -576,6 +575,11 @@ function actionCell(r){
   const c=T[r.action_tier]||'#c9d1d9';
   const note=r.action_note? ` <span class="src">${r.action_note}</span>`:'';
   return `<b style="color:${c}">${r.action||''}</b>${note}`;
+}
+function evidenceCell(r){
+  if(!r.evidence_tier) return "";
+  const T={PRIME:'#f0c000',PREFERRED:'#3fb950',EXPERIMENTAL:'#58a6ff',CONTEXT:'#8b949e',CAUTION:'#d29922',AVOID:'#f85149'};
+  return `<b style="color:${T[r.evidence_tier]||'#c9d1d9'}" title="${r.evidence_reason||''}">${r.evidence_tier}</b>`;
 }
 function trendCell(r){
   const T={up:'#3fb950',flat:'#8b949e',down:'#f85149'};
@@ -710,8 +714,8 @@ $("#colsBtn").onclick=()=>{const p=$("#colPanel"); p.style.display=(p.style.disp
 $("#reload").onclick=()=>{ const s=$("#snap"); load(s.value||"latest"); };
 $("#csv").onclick=()=>{
   const cols = MODE==="directional"
-    ? ["ticker","action","action_note","trend","trend_adx","signal","trigger","side","rank","score","prime","last","live","live_status","live_dist","atr","atr_pct","rs","rs_pct","level","dist","age","stop","tgt","time_exit","qty","detail","label"]
-    : ["ticker","signal","side","rank","score","prime","last","level","dist","age","stop","tgt","time_exit","qty","detail","volx","atr","atr_pct","rs","rs_pct","ern",
+    ? ["ticker","action","action_note","evidence_tier","evidence_reason","evidence_rank","trend","trend_adx","signal","trigger","side","rank","score","prime","last","live","live_status","live_dist","atr","atr_pct","rs","rs_pct","level","dist","age","stop","tgt","time_exit","qty","detail","label"]
+    : ["ticker","signal","evidence_tier","evidence_reason","evidence_rank","side","rank","score","prime","last","level","dist","age","stop","tgt","time_exit","qty","detail","volx","atr","atr_pct","rs","rs_pct","ern",
        "regime","regime_adx","align","vol_state","vol_src","cell","structure","ivr","iv","rv","vrp","term","opt_liq","opt_oi","opt_spread","label"];
   const head=cols.join(",");
   const lines=view.map(r=>cols.map(c=>{

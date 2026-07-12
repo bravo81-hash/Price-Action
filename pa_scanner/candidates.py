@@ -11,8 +11,8 @@ FOLDED INTO S4 as a second trigger. OSMR2 settled the parameter test - RSI(2)
 lost to RSI(3) in the US, so S4 keeps RSI(3) < 15. LO7 / BBMR / IBSMR failed
 the bar and were deleted. Replicated regime findings applied to the app:
 bench-bearish regimes supercharge MR (US +5.57% @63d t=9.37, ASX +4.09%
-t=6.96) -> stand-down banner and index penalty exempt S4; ASX MR excess grows
-with horizon -> ASX S4 rows use the position exit template.
+t=6.96) were later retired by date matching and clustered inference. The ASX
+63-bar S4 policy subsequently failed matched OCO validation and is AVOID.
 
 CANDIDATES is empty until a new hypothesis round opens. PBEMA remains parked
 below awaiting an out-of-sample re-test on data unseen by round 1.

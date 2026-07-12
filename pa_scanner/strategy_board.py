@@ -3,7 +3,8 @@
 Every tier is keyed to a backtest finding, not a heuristic. The only
 market-wide conditioner used is the benchmark regime (the validated
 stand-down axis; PRIME retired by the date-matched audit); the rest is each rule's validation status in the
-given market. This is a display layer - it does not change per-ticker scoring.
+given market. The same assessment annotates each row and gates entry actions,
+sizing and enrichment order; it still does not alter the rule's raw score.
 
 Tiers (high -> low): PRIME, PREFERRED, EXPERIMENTAL, CONTEXT, CAUTION, AVOID.
 """
@@ -22,7 +23,7 @@ NAMES = {"S1": "Reversal at level", "S2": "Pullback breakout",
          "S3": "Range / chop", "S4": "Oversold snapback"}
 
 
-def _assess(code, market, bearish):
+def assess_rule(code, market, bearish):
     """Return (tier, reason, alt) for one rule given market + bench regime."""
     if code == "S4":
         # PRIME retired: the date-matched, block-bootstrapped audit found no
@@ -63,13 +64,41 @@ def _assess(code, market, bearish):
     return ("CONTEXT", "", None)
 
 
+def assess_row(row, market, bearish):
+    """Evidence tier for one concrete row, including side-specific findings.
+
+    The board is deliberately rule-wide; rows can be more precise. In India,
+    only bearish S1 events have measured exit value, while the bullish side is
+    context. Likewise the suggestive India S2 result applies to longs only.
+    """
+    code, side = row.get("signal"), row.get("side")
+    if market == "in" and code == "S1":
+        if side == "short":
+            return ("PREFERRED", "bearish S1 exit/risk flag replicated; not a short entry", None)
+        return ("CONTEXT", "India S1 bullish entry has no measured edge", None)
+    if market == "in" and code == "S2" and side != "long":
+        return ("CONTEXT", "India S2 evidence applies to longs only", None)
+    return assess_rule(code, market, bearish)
+
+
+def annotate_evidence(rows, market, bench_bias):
+    """Attach the evidence decision consumed by rows, sizing and exports."""
+    bearish = bench_bias == "bearish"
+    for row in rows:
+        tier, reason, _alt = assess_row(row, market, bearish)
+        row["evidence_tier"] = tier
+        row["evidence_reason"] = reason
+        row["evidence_rank"] = TIERS[tier][0]
+    return rows
+
+
 def build_board(market, bench_bias, rows, snap_state=None):
     """Ordered strategy board for the day. Returns {header, entries}."""
     bearish = bench_bias == "bearish"
     hits = Counter(r.get("signal") for r in rows)
     entries = []
     for code in ("S1", "S2", "S3", "S4"):
-        tier, reason, alt = _assess(code, market, bearish)
+        tier, reason, alt = assess_rule(code, market, bearish)
         rank, color, _gloss = TIERS[tier]
         entries.append({"code": code, "name": NAMES[code], "tier": tier,
                         "tier_rank": rank, "color": color, "reason": reason,

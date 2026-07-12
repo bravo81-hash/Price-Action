@@ -347,9 +347,9 @@ def add_exit_levels(rows, market="us"):
 
     Swing template (default): stop 2.0 x ATR, target 1.5 x ATR, 10 bars
     (10d med MAE ~ -3.4%). Neutral (S3): range edges as short-strike refs.
-    India S2 longs use the POSITION template - the horizon study showed
-    +0.95-1.14% excess at 42-63d (t~1.8-2.3) with favorable skew - stop
-    3.5 x ATR, target 4.5 x ATR, 63 bars (63d med MAE -7.9% / MFE +9.6%).
+    India S2 longs retain the experimental POSITION research template from the
+    horizon study: stop 3.5 x ATR, target 4.5 x ATR, 63 bars. Evidence gating
+    prevents BUY/Qty authority until matched validation promotes the rule.
     US directional holds should NOT be extended: 42-63d excess is negative
     (S2 t=-4.6), so US keeps the 10-bar template.
     """
@@ -388,7 +388,9 @@ def add_exit_levels(rows, market="us"):
         # multiplier and the Greeks), so a share count there is meaningless.
         r["qty"] = None
         is_option_row = (market == "us")
-        if (CFG.risk_dollars > 0 and not is_option_row
+        entry_authorized = (r.get("action") == "BUY"
+                            and r.get("evidence_tier") in ("PRIME", "PREFERRED"))
+        if (CFG.risk_dollars > 0 and not is_option_row and entry_authorized
                 and r["side"] in ("long", "short")
                 and raw_stop is not None and abs(last - raw_stop) > 0):
             r["qty"] = int(CFG.risk_dollars // abs(last - raw_stop))

@@ -10,9 +10,9 @@ warning on an existing long. The action is read off weekly-trend x trigger:
   FLAT           BUY (small)         WATCH               AVOID
   DOWNtrend      WATCH (risky bounce) AVOID              EXIT (get out)
 
-Conservative by design: a bullish reversal inside a *downtrend* is WATCH, not
-BUY, because these names can't be hedged. Colour tiers: pos (green) = add/hold,
-warn (amber) = reduce/avoid/watch, exit (red) = get out.
+The matrix is technical context, then the row's evidence tier gates entry
+authority: only PRIME/PREFERRED may retain BUY/HOLD; weaker tiers become WATCH
+or AVOID. REDUCE/EXIT warnings remain visible with their evidence label.
 """
 from . import regime as rg
 
@@ -38,8 +38,19 @@ def decide(trend_bias, side):
     return ACTION_MATRIX[(trend_bias, trig)]
 
 
+def gate_entry(action, evidence):
+    """Apply evidence authority to a technical action tuple."""
+    verb, note, tier = action
+    if verb in ("BUY", "HOLD"):
+        if evidence == "AVOID":
+            return "AVOID", "evidence gate", "warn"
+        if evidence not in ("PRIME", "PREFERRED"):
+            return "WATCH", evidence.lower() + " evidence", "warn"
+    return verb, note, tier
+
+
 def add_action(rows, bundle):
-    """Annotate each hit with weekly trend + the long-only action verb.
+    """Annotate each hit with evidence-gated long-only action authority.
 
     Direction is the same price-only read used by the US regime, so the two
     markets stay consistent. No vol / options / TWS work happens here.
@@ -51,6 +62,11 @@ def add_action(rows, bundle):
             dir_cache[t] = rg.direction_read(bundle[t][0])
         bias, dmeta = dir_cache[t]
         verb, note, tier = decide(bias, r["side"])
+        evidence = r.get("evidence_tier", "CONTEXT")
+        # Evidence governs entry authority. Technical REDUCE/EXIT warnings are
+        # left intact, but a null/experimental rule can never become a BUY just
+        # because the background trend is up. AVOID is an explicit no-entry.
+        verb, note, tier = gate_entry((verb, note, tier), evidence)
         r["trend"] = _TREND[bias]
         r["trend_adx"] = round(dmeta["adx"], 1)
         r["trigger"] = rg.signal_direction(r["side"])

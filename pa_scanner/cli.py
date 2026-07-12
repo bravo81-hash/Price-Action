@@ -18,7 +18,7 @@ from .action import add_action
 from .earnings import annotate_earnings
 from .ledger import update_ledger
 from .snapshot import build_snapshot
-from .strategy_board import build_board
+from .strategy_board import build_board, annotate_evidence
 from .report import write_report
 from .webexport import write_web
 
@@ -129,10 +129,11 @@ def main():
         rows = [r for r in rows if r["score"] >= floor]
         print(f"[scan] score floor {floor}: {n0} -> {len(rows)} signals")
     # PRIME before enrichment: TWS budget (top-N in row order) must reach the
-    # highest-conviction rows first, not just highest raw score
+    # highest-evidence rows first, not just highest raw score.
     mark_prime(rows, binfo, market=a.market)
-    rows.sort(key=lambda r: (bool(r.get("prime")), r["score"]), reverse=True)
-
+    bench_bias = (binfo or {}).get("bias")
+    annotate_evidence(rows, a.market, bench_bias)
+    rows.sort(key=lambda r: (r.get("evidence_rank", 99), -r["score"]))
     live_health = None
     if directional:
         print(f"[scan] {len(rows)} signals; assigning long-only actions...")
@@ -166,10 +167,10 @@ def main():
 
     compute_rank(rows)
     add_exit_levels(rows, market=a.market)
-    rows.sort(key=lambda r: (bool(r.get("prime")), r.get("rank", 0), r["score"]),
-              reverse=True)
+    rows.sort(key=lambda r: (r.get("evidence_rank", 99),
+                             -r.get("rank", 0), -r["score"]))
 
-    board = build_board(a.market, (binfo or {}).get("bias"), rows,
+    board = build_board(a.market, bench_bias, rows,
                         snap_state=snap["state"])
     if binfo is not None:
         binfo["board"] = board

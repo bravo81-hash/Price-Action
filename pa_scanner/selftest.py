@@ -265,7 +265,7 @@ def main():
     check("live_status zero-ATR safe", live_status(s2L, 102.0, 0.0)[0] == "triggered")
 
     # --- directional action matrix (ASX / India long-only) ---
-    from .action import decide
+    from .action import decide, gate_entry
     check("up + long  -> BUY",    decide("bullish", "long")[0] == "BUY")
     check("up + short -> REDUCE", decide("bullish", "short")[0] == "REDUCE")
     check("up + neut  -> HOLD",   decide("bullish", "neutral")[0] == "HOLD")
@@ -278,6 +278,29 @@ def main():
     check("down + neut  -> AVOID", decide("bearish", "neutral")[0] == "AVOID")
     check("EXIT is red tier",   decide("bearish", "short")[2] == "exit")
     check("BUY is green tier",  decide("bullish", "long")[2] == "pos")
+    check("evidence gate: PREFERRED retains BUY",
+          gate_entry(decide("bullish", "long"), "PREFERRED")[0] == "BUY")
+    check("evidence gate: EXPERIMENTAL BUY becomes WATCH",
+          gate_entry(decide("bullish", "long"), "EXPERIMENTAL")[0] == "WATCH")
+    check("evidence gate: AVOID BUY becomes AVOID",
+          gate_entry(decide("bullish", "long"), "AVOID")[0] == "AVOID")
+    check("evidence gate: technical EXIT remains visible with context evidence",
+          gate_entry(decide("bearish", "short"), "CONTEXT")[0] == "EXIT")
+    from .strategy_board import annotate_evidence as _annotate_evidence
+    from .action import add_action as _add_action
+    gate_bundle = {"G": (make_s2("long"), dl.to_weekly(make_s2("long")))}
+    gate_rows = [{"ticker":"G", "signal":"S4", "side":"long", "score":0.7}]
+    _annotate_evidence(gate_rows, "asx", "neutral")
+    _add_action(gate_rows, gate_bundle)
+    check("end-to-end: ASX S4 board AVOID cannot emit row BUY",
+          gate_rows[0]["evidence_tier"] == "AVOID"
+          and gate_rows[0]["action"] == "AVOID")
+    gate_rows2 = [{"ticker":"G", "signal":"S2", "side":"long", "score":0.7}]
+    _annotate_evidence(gate_rows2, "in", "neutral")
+    _add_action(gate_rows2, gate_bundle)
+    check("end-to-end: India S2 EXPERIMENTAL emits WATCH, not BUY",
+          gate_rows2[0]["evidence_tier"] == "EXPERIMENTAL"
+          and gate_rows2[0]["action"] == "WATCH")
 
     # --- ATR% column ---
     from .scanner import scan, option_liquidity
@@ -646,7 +669,7 @@ def main():
               'l:"Live"' in h and "reclaimed" in h and "101.5" in h)
 
     print("strategy board")
-    from .strategy_board import build_board
+    from .strategy_board import build_board, annotate_evidence
     rws=[{"signal":"S4"}]*10+[{"signal":"S3"}]*5+[{"signal":"S1"}]*2+[{"signal":"S2"}]*3
     bb=build_board("us","bearish",rws,"RISK_OFF")
     order=[e["code"] for e in bb["entries"]]
@@ -669,6 +692,18 @@ def main():
     ax={e["code"]:e["tier"] for e in build_board("asx","neutral",rws)["entries"]}
     check("board: ASX S2 CONTEXT (null all horizons)", ax["S2"]=="CONTEXT")
     check("board: ASX S4 AVOID after negative matched-OCO result and holdout", ax["S4"]=="AVOID")
+    evrows = [{"signal":"S4","side":"long"},
+              {"signal":"S1","side":"short"},
+              {"signal":"S1","side":"long"},
+              {"signal":"S2","side":"long"}]
+    annotate_evidence(evrows, "in", "neutral")
+    check("row evidence: India S4 CONTEXT",
+          evrows[0]["evidence_tier"] == "CONTEXT")
+    check("row evidence: India S1 bearish exit PREFERRED but bullish S1 CONTEXT",
+          evrows[1]["evidence_tier"] == "PREFERRED"
+          and evrows[2]["evidence_tier"] == "CONTEXT")
+    check("row evidence: India S2-long EXPERIMENTAL",
+          evrows[3]["evidence_tier"] == "EXPERIMENTAL")
     check("board: entries ordered by tier then hits",
           all(bb["entries"][i]["tier_rank"]<=bb["entries"][i+1]["tier_rank"]
               for i in range(len(bb["entries"])-1)))
@@ -679,6 +714,7 @@ def main():
                      tdb+"/b.html", market="us",
                      bench={"symbol":"SPY","bias":"bearish","adx":26,"board":bb})).read()
         check("report embeds board JSON", '"tier"' in hb and "EXPERIMENTAL" in hb)
+        check("report exposes per-row Evidence column", 'l:"Evidence"' in hb)
 
     print("IBKR contract spec + live fail-loud")
     from .config import contract_spec
@@ -817,6 +853,15 @@ def main():
                 encoding="utf-8").read()
     check("dashboard: bearish stand-down banner is not hidden by note fallback",
           'else if(!(d.bench && d.bench.bias==="bearish"))' in dash)
+    from .webexport import _row as _webrow
+    wx = _webrow({"ticker":"X", "signal":"S4", "side":"long", "qty":12,
+                  "evidence_tier":"EXPERIMENTAL", "evidence_reason":"test",
+                  "label":"flush", "dist_atr":1.25})
+    check("web export carries Qty and row evidence",
+          wx["qty"] == 12 and wx["evidence_tier"] == "EXPERIMENTAL"
+          and wx["evidence_reason"] == "test")
+    check("web export preserves S4 distance/detail",
+          wx["dist"] == 1.25 and wx["detail"] == "flush")
 
     print("ledger robustness (atomic / corrupt / stale-drop)")
     from .ledger import _load as _lload, _save as _lsave, update_ledger as _upd
@@ -905,16 +950,22 @@ def main():
     add_exit_levels(qr_us, market="us")
     check("qty disabled on US option rows", qr_us[0]["qty"] is None)
     # ASX is stock: qty = risk / raw stop distance (2.0 ATR -> 4.0)
-    qr_asx = [{"side": "long", "signal": "S2", "last": 100.0, "atr": 2.0}]
+    qr_asx = [{"side": "long", "signal": "S2", "last": 100.0, "atr": 2.0,
+               "action": "BUY", "evidence_tier": "PREFERRED"}]
     add_exit_levels(qr_asx, market="asx")
     check("qty = risk / stop distance on ASX stock", qr_asx[0]["qty"] == 250)
     # sub-dollar ASX name: raw stop distance survives (2dp would zero it).
     # ASX S4 uses the 3.5x ATR position template -> distance 3.5*0.006 = 0.021
-    qr_penny = [{"side": "long", "signal": "S4", "last": 0.20, "atr": 0.006}]
+    qr_penny = [{"side": "long", "signal": "S4", "last": 0.20, "atr": 0.006,
+                 "action": "BUY", "evidence_tier": "PREFERRED"}]
     add_exit_levels(qr_penny, market="asx")
     dist = abs(0.20 - qr_penny[0]["stop"])
     check("sub-dollar stop distance not rounded away",
           abs(dist - 0.021) < 1e-9 and qr_penny[0]["qty"] == int(1000.0 // 0.021))
+    qr_gated = [{"side": "long", "signal": "S2", "last": 100.0, "atr": 2.0,
+                 "action": "WATCH", "evidence_tier": "EXPERIMENTAL"}]
+    add_exit_levels(qr_gated, market="asx")
+    check("Qty suppressed unless evidence authorizes BUY", qr_gated[0]["qty"] is None)
     CFG.risk_dollars = 0.0
     qr_off = [{"side": "long", "signal": "S2", "last": 100.0, "atr": 2.0}]
     add_exit_levels(qr_off, market="asx")

@@ -193,11 +193,10 @@ class RangeChopNeutral:
 
 @register
 class OversoldSnapback:
-    """Promoted candidate OSMR (5y study: US 5d excess +0.38%, t=3.44;
-    replicated ASX t=2.13; persists in ASX to 63d). Long-only mean reversion:
-    an uptrend name (above its 200SMA) hit by a sharp multi-day flush
-    (RSI(3) < 15, two consecutive down closes) tends to snap back within
-    ~5 bars. No short mirror - candidate shorts were harmful everywhere.
+    """Experimental OSMR screen. Promotion-era statistics did not replicate;
+    the matched OCO audit leaves US EXPERIMENTAL, ASX AVOID and India CONTEXT.
+    Detect an uptrend name above its 200SMA hit by a sharp multi-day flush.
+    No short mirror - candidate shorts were harmful everywhere.
     """
     code = "S4"
     name = "Oversold snapback"
@@ -211,7 +210,7 @@ class OversoldSnapback:
         if ctx.last_close <= ctx.sma200:
             return Signal(False, None, 0.0, "")
         rsi_trig = ctx.rsi3 < CFG.s4_rsi_max and ctx.dn_streak >= 2
-        streak_trig = ctx.dn_streak >= CFG.s4_streak_min   # round-2 promoted (STRK4)
+        streak_trig = ctx.dn_streak >= CFG.s4_streak_min   # frozen STRK4 discovery trigger
         if not (rsi_trig or streak_trig):
             return Signal(False, None, 0.0, "")
         score = _clip01(0.55 + max(0.0, CFG.s4_rsi_max - ctx.rsi3) / 100.0
