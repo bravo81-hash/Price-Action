@@ -11,6 +11,7 @@ import datetime as dt
 import glob
 import json
 import os
+import tempfile
 
 from .config import MARKETS
 
@@ -19,6 +20,7 @@ def _row(r: dict) -> dict:
     d = {k: r.get(k) for k in
           ("ticker", "signal", "signal_name", "side", "score", "rank", "prime", "last", "atr", "atr_pct",
            "rs", "rs_pct", "age", "ern", "ern_status", "stop", "tgt", "time_exit", "label", "level",
+           "range_lo", "range_hi",
            "qty", "evidence_tier", "evidence_reason", "evidence_rank",
           # options (US) fields
           "regime", "regime_adx", "align", "vol_state", "vol_src", "cell", "structure",
@@ -46,6 +48,67 @@ def _row(r: dict) -> dict:
     return d
 
 
+FVS_FEED_SCHEMA_VERSION = 1
+FVS_FEED_FIELDS = (
+    "ticker", "signal", "signal_name", "side", "score", "rank", "last", "atr",
+    "rs_pct", "age", "ern", "ern_status", "level", "range_lo", "range_hi",
+    "evidence_tier", "evidence_reason", "evidence_rank", "regime", "align",
+)
+
+
+def build_fvs_feed(rows, *, generated, bench=None) -> dict:
+    """Build the compact, context-only contract consumed by Forward-Vol-Scanner."""
+    compact_rows = []
+    for source in rows:
+        row = {key: source.get(key) for key in FVS_FEED_FIELDS}
+        ticker = str(row.get("ticker") or "").strip().upper()
+        if not ticker:
+            continue
+        row["ticker"] = ticker
+        compact_rows.append(row)
+    snap = (bench or {}).get("snap") or {}
+    board = (bench or {}).get("board") or {}
+    compact_bench = {
+        "symbol": (bench or {}).get("symbol"),
+        "bias": (bench or {}).get("bias"),
+        "adx": (bench or {}).get("adx"),
+        "state": snap.get("state"),
+        "guidance": snap.get("guidance"),
+        "evidence_asof": board.get("asof"),
+    }
+    return {
+        "schema_version": FVS_FEED_SCHEMA_VERSION,
+        "source": "bravo81-hash/Price-Action",
+        "market": "us",
+        "authority": "context_only",
+        "generated": generated,
+        "count": len(compact_rows),
+        "bench": compact_bench,
+        "rows": compact_rows,
+    }
+
+
+def _write_json_atomic(path: str, payload: dict) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".fvs-feed-", suffix=".json",
+                               dir=os.path.dirname(path))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, separators=(",", ":"))
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+
+
+def write_fvs_feed(rows, out_dir="docs", *, generated, bench=None) -> str:
+    path = os.path.join(out_dir, "data", "fvs_feed.json")
+    _write_json_atomic(path, build_fvs_feed(rows, generated=generated, bench=bench))
+    return path
+
+
 def write_web(rows, out_dir="docs", scanned=0, universe=0, keep=60, note=None, market="us", bench=None):
     mkt = MARKETS[market]
     suffix = "" if market == "us" else f"_{market}"
@@ -69,6 +132,9 @@ def write_web(rows, out_dir="docs", scanned=0, universe=0, keep=60, note=None, m
         payload["note"] = note
     if bench:
         payload["bench"] = bench
+
+    if market == "us":
+        write_fvs_feed(payload["rows"], out_dir, generated=payload["generated"], bench=bench)
 
     date = now.strftime("%Y-%m-%d")
     blob = json.dumps(payload, separators=(",", ":"))
