@@ -853,7 +853,8 @@ def main():
                 encoding="utf-8").read()
     check("dashboard: bearish stand-down banner is not hidden by note fallback",
           'else if(!(d.bench && d.bench.bias==="bearish"))' in dash)
-    from .webexport import _row as _webrow
+    from .webexport import (_row as _webrow, build_fvs_feed,
+                            write_fvs_feed)
     wx = _webrow({"ticker":"X", "signal":"S4", "side":"long", "qty":12,
                   "evidence_tier":"EXPERIMENTAL", "evidence_reason":"test",
                   "label":"flush", "dist_atr":1.25})
@@ -862,6 +863,22 @@ def main():
           and wx["evidence_reason"] == "test")
     check("web export preserves S4 distance/detail",
           wx["dist"] == 1.25 and wx["detail"] == "flush")
+    feed = build_fvs_feed([wx], generated="2026-07-20T23:30:00Z",
+                          bench={"symbol": "SPY", "bias": "neutral",
+                                 "snap": {"state": "CHOP_NO_EDGE",
+                                          "guidance": "no directional edge"}})
+    check("FVS feed is versioned and explicitly context-only",
+          feed["schema_version"] == 1 and feed["authority"] == "context_only"
+          and feed["market"] == "us")
+    check("FVS feed excludes chart and order payloads",
+          "spark" not in feed["rows"][0] and "qty" not in feed["rows"][0]
+          and "structure" not in feed["rows"][0])
+    with tempfile.TemporaryDirectory() as ftd:
+        fp = write_fvs_feed([wx], ftd, generated=feed["generated"])
+        check("FVS feed writes atomically to its stable path",
+              fp.endswith("data/fvs_feed.json") and os.path.exists(fp)
+              and not any(name.startswith(".fvs-feed-")
+                          for name in os.listdir(os.path.dirname(fp))))
 
     print("ledger robustness (atomic / corrupt / stale-drop)")
     from .ledger import _load as _lload, _save as _lsave, update_ledger as _upd

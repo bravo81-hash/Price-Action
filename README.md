@@ -49,6 +49,16 @@ Open the resulting HTML in any browser. The table sorts (click headers),
 filters (All / S1 / S2 / Long / Short + ticker search), exports CSV, and links
 each row to its TradingView chart. Sparklines show the last 40 daily closes.
 
+## Forward-Vol-Scanner integration
+
+Each scheduled US scan also publishes `docs/data/fvs_feed.json`, a compact
+versioned context feed for Forward-Vol-Scanner. The integration is deliberately
+one-way: this repository supplies SPY regime and per-ticker signal/evidence
+context, while Forward-Vol-Scanner remains authoritative for shortlist ranking,
+exact option legs, liquidity, portfolio risk and TWS staging. S1/S2 are context
+only, S3 is neutral research context and S4 is experimental. See
+[`docs/FVS_INTEGRATION.md`](docs/FVS_INTEGRATION.md) for the contract.
+
 ## Live last-hour workflow (real-time TWS)
 
 The price-action signals are computed on the **daily bar**, which does not close
