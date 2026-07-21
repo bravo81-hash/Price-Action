@@ -7,5 +7,7 @@ env/
 pa_report.html
 pa_report_asx.html
 pa_report_in.html
+pattern_report.html
+pattern_scan*.json
 pa_scan_*.csv
 backtest/

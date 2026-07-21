@@ -1,8 +1,57 @@
 # pa_scanner
 
-Price-action scanner for liquid US equities + ETFs. Two signals, ranked, output
+Price-action scanner for liquid US equities + ETFs. Multiple signals, ranked, output
 to a self-contained HTML report. Ships with a matching TradingView Pine v6
 indicator for on-chart confirmation and Pine Screener use.
+
+## Chart-pattern shortlist (P1-P9)
+
+The repository also contains a separate, purpose-built daily chart-pattern
+pipeline. It lives here rather than in Forward-Vol-Scanner because pattern
+geometry is price-action candidate generation; Forward-Vol-Scanner remains the
+authority for option structure, volatility, portfolio risk and TWS order
+staging.
+
+```bash
+python -m pa_scanner.pattern_cli
+python -m pa_scanner.pattern_cli --tickers AAPL MSFT NVDA SPY
+python -m pa_scanner.pattern_cli --live       # final shortlist only -> TWS
+```
+
+On Windows, double-click `run_pattern_scan.bat` for the regular scan or
+`run_pattern_scan_live_us.bat` during the final NYSE hour. The output is
+`pattern_report.html`.
+
+The implementation follows a paced two-pass architecture:
+
+1. Bulk adjusted OHLCV scans the liquid universe for deterministic geometry.
+2. The best 100 candidates are scored on momentum, 63-day relative strength,
+   volume, SPY regime and automatically inferred sector-ETF context.
+3. The best 20 context-ranked candidates are reduced to at most 10 actionable
+   setups (`NEAR_TRIGGER`, `CLOSE_CONFIRMED`, or `RETESTING`).
+4. Every row is marked for visual review and links directly to TradingView.
+5. `--live` asks TWS only for those final rows and adds
+   `TRIGGERED_INTRADAY`; it does not crawl historical bars through TWS.
+
+Patterns: **P1 flat base / VCP, P2 cup and handle, P3 inverse head and
+shoulders, P4 double bottom, P5 ascending triangle, P6 head and shoulders top,
+P7 double top, P8 bull flag and P9 bear flag.** Geometry is causal: confirmed
+pivots exclude the final right-hand bars, and a close must penetrate the
+trigger by at least 0.25 ATR. A one-cent breach is still `NEAR_TRIGGER`, not a
+confirmation. Breakout volume is shown separately; `RETESTING` means a recent
+material close beyond the trigger followed by a hold within 0.35 ATR.
+
+The final score is 55% geometry, 35% context and 10% setup state. The context
+component is momentum 32%, RS 25%, sector 18%, volume 15% and broad-market
+alignment 10%. Sector is inferred from 63-day return correlation to the eleven
+SPDR sector ETFs, avoiding hundreds of slow metadata requests. Earnings inside
+the default 20-session holding window are excluded when a date is available;
+unknown dates remain visible rather than being silently treated as safe.
+
+This is deliberately a **ranked shortlist, not `pattern detected = trade`**.
+The report exposes trigger, invalidation, measured target, ATR distance,
+geometry detail and all context components so ambiguous shapes can be rejected
+before execution.
 
 ## Signals
 
