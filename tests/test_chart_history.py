@@ -56,6 +56,21 @@ class ChartHistoryTests(unittest.TestCase):
 
         self.assertIn('x[0]!==null&&x[0]!==undefined&&x[0]!==""', dashboard)
 
+    def test_dashboard_offers_persistent_history_ranges(self):
+        dashboard = (Path(__file__).parents[1] / "docs" / "index.html").read_text()
+
+        self.assertIn('const RANGE_BARS={"3m":63,"6m":126,"1y":252,"2y":504}', dashboard)
+        self.assertIn('localStorage.getItem("paChartRange")||"2y"', dashboard)
+        self.assertIn('data-global-range="3m"', dashboard)
+        self.assertIn('data-global-range="2y"', dashboard)
+        self.assertIn('data-chart-range=', dashboard)
+
+    def test_dashboard_uses_wide_chart_viewports(self):
+        dashboard = (Path(__file__).parents[1] / "docs" / "index.html").read_text()
+
+        self.assertNotIn("max-height:360px", dashboard)
+        self.assertGreaterEqual(dashboard.count("W=1600"), 3)
+
 
 if __name__ == "__main__":
     unittest.main()
