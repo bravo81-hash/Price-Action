@@ -78,14 +78,38 @@ class ChartHistoryTests(unittest.TestCase):
         detail_append = dashboard.index('tb.appendChild(detail);', row_append)
         self.assertLess(row_append, detail_append)
 
-    def test_dashboard_scrolls_only_the_ticker_table(self):
+    def test_dashboard_scrolls_only_the_ticker_rows_vertically(self):
         dashboard = (Path(__file__).parents[1] / "docs" / "index.html").read_text()
 
         self.assertIn('id="tableShell" class="table-shell"', dashboard)
-        self.assertIn('.table-shell{flex:1;min-height:0;overflow:auto', dashboard)
+        self.assertIn('.table-shell{flex:1;min-height:0;max-width:100%;overflow-y:auto;overflow-x:hidden', dashboard)
         self.assertIn('height:100dvh;overflow:hidden;display:flex;flex-direction:column', dashboard)
         self.assertIn('header,.tabs,.banner,.board,.bar{flex:0 0 auto}', dashboard)
         self.assertIn('th{position:sticky;top:0;z-index:5', dashboard)
+
+    def test_dashboard_sections_can_collapse_and_persist(self):
+        dashboard = (Path(__file__).parents[1] / "docs" / "index.html").read_text()
+
+        self.assertIn('data-chrome="header"', dashboard)
+        self.assertIn('data-chrome="board"', dashboard)
+        self.assertIn('data-chrome="filters"', dashboard)
+        self.assertIn('localStorage.getItem("paChromeState")', dashboard)
+        self.assertIn('localStorage.setItem("paChromeState"', dashboard)
+
+    def test_dashboard_fits_columns_without_horizontal_scrolling(self):
+        dashboard = (Path(__file__).parents[1] / "docs" / "index.html").read_text()
+
+        self.assertIn('table-layout:fixed', dashboard)
+        self.assertIn('overflow-x:hidden', dashboard)
+        self.assertIn('function applyHeadWidths()', dashboard)
+        self.assertIn('prefs.widths[h.dataset.k]=h.getBoundingClientRect().width', dashboard)
+        self.assertIn('td.title=value', dashboard)
+
+    def test_dashboard_charts_have_safe_side_padding(self):
+        dashboard = (Path(__file__).parents[1] / "docs" / "index.html").read_text()
+
+        self.assertGreaterEqual(dashboard.count('L=64,R=48'), 3)
+        self.assertIn('padding:12px clamp(14px,1.25vw,24px) 16px', dashboard)
 
 
 if __name__ == "__main__":
