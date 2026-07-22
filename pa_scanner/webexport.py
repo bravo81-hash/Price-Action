@@ -22,6 +22,12 @@ def _row(r: dict) -> dict:
            "rs", "rs_pct", "age", "ern", "ern_status", "stop", "tgt", "time_exit", "label", "level",
            "range_lo", "range_hi",
            "qty", "evidence_tier", "evidence_reason", "evidence_rank",
+          # Forward-Vol-Scanner chart-pattern overlay
+          "pattern_match", "pattern_priority", "pattern_alignment", "pattern_count",
+          "pattern_code", "pattern_name", "pattern_status", "pattern_side",
+          "pattern_score", "pattern_geometry_score", "pattern_trigger",
+          "pattern_invalidation", "pattern_target", "pattern_trade_location",
+          "pattern_room_rr", "pattern_points", "pattern_chart", "pattern_review",
           # options (US) fields
           "regime", "regime_adx", "align", "vol_state", "vol_src", "cell", "structure",
           "ivr", "iv", "rv", "vrp", "term", "live", "live_status", "live_dist",
@@ -109,7 +115,8 @@ def write_fvs_feed(rows, out_dir="docs", *, generated, bench=None) -> str:
     return path
 
 
-def write_web(rows, out_dir="docs", scanned=0, universe=0, keep=60, note=None, market="us", bench=None):
+def write_web(rows, out_dir="docs", scanned=0, universe=0, keep=60, note=None,
+              market="us", bench=None, pattern=None):
     mkt = MARKETS[market]
     suffix = "" if market == "us" else f"_{market}"
     data_dir = os.path.join(out_dir, "data")
@@ -132,6 +139,8 @@ def write_web(rows, out_dir="docs", scanned=0, universe=0, keep=60, note=None, m
         payload["note"] = note
     if bench:
         payload["bench"] = bench
+    if pattern:
+        payload["pattern_scanner"] = pattern
 
     if market == "us":
         write_fvs_feed(payload["rows"], out_dir, generated=payload["generated"], bench=bench)

@@ -45,9 +45,10 @@ python -m pa_scanner.cli --out today.html --limit 150   # cap universe (debug)
 python -m pa_scanner.cli --tickers AAPL MSFT NVDA SPY   # ad-hoc list
 ```
 
-Open the resulting HTML in any browser. The table sorts (click headers),
-filters (All / S1 / S2 / Long / Short + ticker search), exports CSV, and links
-each row to its TradingView chart. Sparklines show the last 40 daily closes.
+Open the resulting HTML in any browser. The table sorts, filters, exports CSV,
+and links each row to TradingView. Click any row to expand or collapse its chart
+immediately above the row. Actionable chart-pattern matches include a detailed
+candlestick view with trigger, invalidation and target levels.
 
 ## Forward-Vol-Scanner integration
 
@@ -58,6 +59,12 @@ context, while Forward-Vol-Scanner remains authoritative for shortlist ranking,
 exact option legs, liquidity, portfolio risk and TWS staging. S1/S2 are context
 only, S3 is neutral research context and S4 is experimental. See
 [`docs/FVS_INTEGRATION.md`](docs/FVS_INTEGRATION.md) for the contract.
+
+The daily Price-Action results also pass through the current chart-pattern
+engine from Forward-Vol-Scanner. Tickers with actionable patterns are placed at
+the top of each list, with aligned patterns ahead of neutral-context matches and
+direction conflicts. This is an ordering and visual-review overlay only; it
+does not promote evidence, increase size, or replace the primary S1-S4 signal.
 
 ## Live last-hour workflow (real-time TWS)
 

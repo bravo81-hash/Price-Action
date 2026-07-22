@@ -53,6 +53,17 @@
  th:hover{color:var(--fg)}
  td.num{text-align:right;font-variant-numeric:tabular-nums}
  tr:hover td{background:#1c2230}
+ tbody tr.data-row{cursor:pointer}
+ tbody tr.data-row.open td{background:#172033}
+ .inspect-row td{padding:0;border-bottom:1px solid var(--accent);background:#0a0f17}
+ .inspect{padding:12px 18px 16px;white-space:normal}
+ .inspect-head{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;margin-bottom:8px}
+ .inspect-title{font-weight:700;font-size:14px}
+ .inspect-meta{color:var(--mut);font-size:11px}
+ .inspect svg{display:block;width:100%;height:auto;max-height:360px;background:#0d1117;border:1px solid var(--bd);border-radius:6px}
+ .pattern-badge{display:inline-block;padding:1px 6px;border-radius:4px;background:#1f6feb33;color:#79c0ff;font-size:10px;font-weight:700}
+ .pattern-badge.conflict{background:#f8514933;color:#ff7b72}
+ .pattern-status{color:var(--mut);font-size:9px;margin-left:4px}
  .tag{padding:1px 7px;border-radius:4px;font-size:11px;font-weight:600}
  .s1{background:#1f6feb33;color:#79c0ff} .s2{background:#a371f733;color:#d2a8ff}
  .s3{background:#8b949e33;color:#c9d1d9} .s4{background:#2ea04333;color:#7ee787}
@@ -367,16 +378,17 @@ S4 reclaimed/below-MA, S1 at-level); India is EOD-only (separate broker, no TWS)
 const $ = s => document.querySelector(s);
 const SUF = {us:"", asx:"_asx", in:"_in"};
 const LABEL = {us:"US", asx:"ASX", in:"India"};
-let ROWS=[], view=[], sortK="evidence_rank", sortDir=1, filt="all", q="", BOARD=null;
+let ROWS=[], view=[], sortK="pattern_priority", sortDir=1, filt="all", q="", BOARD=null;
+let expandedKey=null;
 let market="us", MODE="options", TVP="";
 const ERNWARN = 10;
 
 let COLS = null;   // quality-weighted column model, built in buildCols() after cell helpers
 let prefs = {order:null, hidden:[], widths:{}};
 const FILTERS = {
-  options:[["all","All"],["S1","S1 reversal"],["S2","S2 breakout"],["S3","S3 chop"],["S4","S4 snapback"],["prime","S4★ Prime"],
+  options:[["all","All"],["pattern","Pattern ✓"],["S1","S1 reversal"],["S2","S2 breakout"],["S3","S3 chop"],["S4","S4 snapback"],["prime","S4★ Prime"],
     ["long","Long"],["short","Short"],["neutral","Neutral"],["rs","RS>50"],["ern","Ern safe"]],
-  directional:[["all","All"],["buy","Buy"],["hold","Hold"],["exit","Exit / Trim"],
+  directional:[["all","All"],["pattern","Pattern ✓"],["buy","Buy"],["hold","Hold"],["exit","Exit / Trim"],
     ["avoid","Avoid / Watch"],["S1","S1"],["S2","S2"],["S3","S3"],["S4","S4"],["prime","S4★"],["rs","RS>50"]]
 };
 
@@ -399,6 +411,7 @@ function buildCols(){
   COLS = {
    options:[
     {k:"ticker",l:"Ticker",cell:r=>`<b>${dispSym(r.ticker)}</b>`},
+    {k:"pattern_priority",l:"Pattern",cell:patternCell},
     {k:"signal",l:"Sig",cell:sigCell},
     {k:"evidence_rank",l:"Evidence",cell:evidenceCell},
     {k:"side",l:"Side",cell:r=>`<span class="${r.side}">${r.side}</span>`},
@@ -426,6 +439,7 @@ function buildCols(){
     {k:"tv",l:"TV",nosort:true,cell:tvCell}],
    directional:[
     {k:"ticker",l:"Ticker",cell:r=>`<b>${dispSym(r.ticker)}</b>`},
+    {k:"pattern_priority",l:"Pattern",cell:patternCell},
     {k:"action",l:"Action",cell:actionCell},
     {k:"evidence_rank",l:"Evidence",cell:evidenceCell},
     {k:"signal",l:"Sig",cell:sigCell},
@@ -450,8 +464,16 @@ function buildCols(){
 }
 function sigCell(r){return `<span class="tag ${r.prime?"prime":String(r.signal).toLowerCase()}">${r.signal}${r.prime?"\u2605":""}</span>`;}
 function tvCell(r){return `<a href="https://www.tradingview.com/chart/?symbol=${encodeURIComponent(tvSym(r.ticker))}" target="_blank">TV</a>`;}
+function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function patternCell(r){
+  if(!r.pattern_match) return "";
+  const conflict=r.pattern_alignment==="conflict"?" conflict":"";
+  const side=r.pattern_side?` · ${r.pattern_side}`:"";
+  return `<span class="pattern-badge${conflict}" title="FVS pattern score ${r.pattern_score??''}${side}">${esc(r.pattern_name||r.pattern_code)}</span>`+
+    `<span class="pattern-status">${esc(r.pattern_status||"")}</span>`;
+}
 
-function prefKey(){return "paCols.v2."+MODE;}
+function prefKey(){return "paCols.v3."+MODE;}
 function loadPrefs(){ prefs={order:null,hidden:[],widths:{}};
   try{const p=JSON.parse(localStorage.getItem(prefKey()));if(p)prefs={order:p.order||null,hidden:p.hidden||[],widths:p.widths||{}};}catch(e){} }
 function savePrefs(){try{localStorage.setItem(prefKey(),JSON.stringify(prefs));}catch(e){}}
@@ -594,6 +616,7 @@ function rowHTML(r){
 function passes(r){
   if(q && !dispSym(r.ticker).toLowerCase().includes(q) && !r.ticker.toLowerCase().includes(q)) return false;
   if(filt==="all") return true;
+  if(filt==="pattern") return !!r.pattern_match;
   if(filt==="S1"||filt==="S2"||filt==="S3"||filt==="S4") return r.signal===filt;
   if(filt==="prime") return !!r.prime;
   if(filt==="rs") return r.rs_pct!=null && r.rs_pct>50;
@@ -615,8 +638,59 @@ function render(){
     return String(x).localeCompare(String(y))*sortDir;
   });
   const tb=$("#b"); tb.innerHTML="";
-  for(const r of view){ const tr=document.createElement("tr"); tr.innerHTML=rowHTML(r); tb.appendChild(tr); }
+  for(const r of view){
+    const key=rowKey(r);
+    if(expandedKey===key){
+      const detail=document.createElement("tr"); detail.className="inspect-row";
+      detail.innerHTML=`<td colspan="${visibleCols().length}">${inspectHTML(r)}</td>`;
+      tb.appendChild(detail);
+    }
+    const tr=document.createElement("tr"); tr.className="data-row"+(expandedKey===key?" open":"");
+    tr.dataset.key=key; tr.title="Click to inspect or collapse chart"; tr.innerHTML=rowHTML(r);
+    tr.onclick=e=>{if(e.target.closest("a,button,input,select"))return; expandedKey=expandedKey===key?null:key; render();};
+    tb.appendChild(tr);
+  }
   $("#state").style.display = ROWS.length ? "none" : "block";
+}
+function rowKey(r){return [r.ticker,r.signal,r.side,r.action||""].join("|");}
+function inspectHTML(r){
+  const matched=!!(r.pattern_chart&&Array.isArray(r.pattern_chart.close)&&r.pattern_chart.close.length>1);
+  const title=matched?`${r.pattern_name||r.pattern_code} · ${r.pattern_status||""}`:"Price history";
+  const meta=matched
+    ? `FVS score ${r.pattern_score??"—"} · ${r.pattern_side||"—"} · trigger ${r.pattern_trigger??"—"} · invalidation ${r.pattern_invalidation??"—"} · target ${r.pattern_target??"—"} · room ${r.pattern_room_rr??"—"}R`
+    : "Expanded close-price view; no actionable FVS pattern detected.";
+  return `<div class="inspect"><div class="inspect-head"><span class="inspect-title">${esc(dispSym(r.ticker))} — ${esc(title)}</span><span class="inspect-meta">${esc(meta)}</span></div>${matched?candleChart(r):largeSpark(r)}</div>`;
+}
+function candleChart(r){
+  const c=r.pattern_chart, close=c.close||[], high=c.high||close, low=c.low||close, open=c.open||close;
+  const n=Math.min(close.length,high.length,low.length,open.length), W=960,H=330,L=54,R=18,T=18,B=34;
+  const levels=[
+    [Number(r.pattern_trigger),"trigger","#58a6ff"],
+    [Number(r.pattern_invalidation),"invalid","#f85149"],
+    [Number(r.pattern_target),"target","#3fb950"]
+  ].filter(x=>Number.isFinite(x[0]));
+  const vals=[...high.slice(0,n),...low.slice(0,n),...levels.map(x=>x[0])].filter(Number.isFinite);
+  if(!vals.length) return largeSpark(r);
+  let lo=Math.min(...vals),hi=Math.max(...vals),pad=(hi-lo||1)*.06; lo-=pad;hi+=pad;
+  const x=i=>L+(W-L-R)*(i+.5)/n, y=v=>T+(H-T-B)*(hi-v)/(hi-lo||1), cw=Math.max(1,Math.min(5,(W-L-R)/n*.65));
+  let marks="";
+  for(let i=0;i<n;i++){
+    const o=Number(open[i]),cl=Number(close[i]),h=Number(high[i]),l=Number(low[i]); if(![o,cl,h,l].every(Number.isFinite))continue;
+    const color=cl>=o?"#3fb950":"#f85149", yy=Math.min(y(o),y(cl)), bh=Math.max(1,Math.abs(y(o)-y(cl)));
+    marks+=`<line x1="${x(i)}" y1="${y(h)}" x2="${x(i)}" y2="${y(l)}" stroke="${color}" stroke-width="1"/><rect x="${x(i)-cw/2}" y="${yy}" width="${cw}" height="${bh}" fill="${color}"/>`;
+  }
+  let guides="";
+  for(const [v,label,color] of levels) guides+=`<line x1="${L}" y1="${y(v)}" x2="${W-R}" y2="${y(v)}" stroke="${color}" stroke-dasharray="6 4" opacity=".8"/><text x="${W-R-4}" y="${y(v)-4}" fill="${color}" text-anchor="end" font-size="11">${label} ${v}</text>`;
+  const date=c.dates||[], first=date[0]||"", last=date[n-1]||"";
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Candlestick chart for ${esc(r.ticker)}"><line x1="${L}" y1="${T}" x2="${L}" y2="${H-B}" stroke="#30363d"/><line x1="${L}" y1="${H-B}" x2="${W-R}" y2="${H-B}" stroke="#30363d"/>${guides}${marks}<text x="${L}" y="${H-10}" fill="#8b949e" font-size="11">${esc(first)}</text><text x="${W-R}" y="${H-10}" fill="#8b949e" text-anchor="end" font-size="11">${esc(last)}</text><text x="${L-6}" y="${T+10}" fill="#8b949e" text-anchor="end" font-size="10">${hi.toFixed(2)}</text><text x="${L-6}" y="${H-B}" fill="#8b949e" text-anchor="end" font-size="10">${lo.toFixed(2)}</text></svg>`;
+}
+function largeSpark(r){
+  const a=(r.spark||[]).map(Number).filter(Number.isFinite),W=960,H=260,L=50,R=18,T=18,B=34;
+  if(a.length<2)return `<div class="inspect-meta">No chart history is available for this row.</div>`;
+  let lo=Math.min(...a),hi=Math.max(...a),pad=(hi-lo||1)*.08;lo-=pad;hi+=pad;
+  const x=i=>L+(W-L-R)*i/(a.length-1),y=v=>T+(H-T-B)*(hi-v)/(hi-lo||1);
+  const pts=a.map((v,i)=>`${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" "),color=r.side==="short"?"#f85149":"#3fb950";
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Close-price chart for ${esc(r.ticker)}"><line x1="${L}" y1="${H-B}" x2="${W-R}" y2="${H-B}" stroke="#30363d"/><polyline fill="none" stroke="${color}" stroke-width="2" points="${pts}"/><text x="${L-6}" y="${T+10}" fill="#8b949e" text-anchor="end" font-size="10">${hi.toFixed(2)}</text><text x="${L-6}" y="${H-B}" fill="#8b949e" text-anchor="end" font-size="10">${lo.toFixed(2)}</text><text x="${W-R}" y="${H-10}" fill="#8b949e" text-anchor="end" font-size="11">last ${a[a.length-1].toFixed(2)}</text></svg>`;
 }
 function renderBoard(){
   const el=$("#board"); if(!el) return;
@@ -639,13 +713,15 @@ function renderBoard(){
 }
 function applyData(d){
   ROWS = d.rows || [];
+  expandedKey=null;
   MODE = d.mode || "options";
   TVP  = d.tv || "";
   $("#title").textContent = "PRICE-ACTION SCAN — " + (d.label || LABEL[market] || "");
   $("#gen").textContent = d.generated ? "updated " + d.generated.replace("T"," ").replace("Z"," UTC") : "";
   const snapTxt = (d.bench && d.bench.snap) ? ` · ${d.bench.snap.state} — ${d.bench.snap.guidance} [context]` : "";
   const bench = d.bench ? ` · ${d.bench.symbol}: ${String(d.bench.bias).toUpperCase()} (ADX ${d.bench.adx})${snapTxt}` : "";
-  $("#counts").textContent = `universe ${d.universe??"?"} · liquid ${d.scanned??"?"} · signals ${d.count??ROWS.length}${bench}`;
+  const pm=d.pattern_scanner?` · pattern tickers ${d.pattern_scanner.matched_tickers??0}`:"";
+  $("#counts").textContent = `universe ${d.universe??"?"} · liquid ${d.scanned??"?"} · signals ${d.count??ROWS.length}${pm}${bench}`;
   const b0=$("#banner");
   if(d.bench && d.bench.bias==="bearish"){
     b0.textContent = `⚠ STAND-DOWN — ${d.bench.symbol} regime bearish. Trend entries (S1/S2): −0.70% excess @5d (t=−6.05), negative at every horizon — reduce size / stand aside. S4 exempt from this warning (the stand-down evidence is S1/S2-specific). The bearish-regime S4 'supercharge' was retired by the date-matched audit.`;
@@ -714,8 +790,8 @@ $("#colsBtn").onclick=()=>{const p=$("#colPanel"); p.style.display=(p.style.disp
 $("#reload").onclick=()=>{ const s=$("#snap"); load(s.value||"latest"); };
 $("#csv").onclick=()=>{
   const cols = MODE==="directional"
-    ? ["ticker","action","action_note","evidence_tier","evidence_reason","evidence_rank","trend","trend_adx","signal","trigger","side","rank","score","prime","last","live","live_status","live_dist","atr","atr_pct","rs","rs_pct","level","dist","age","stop","tgt","time_exit","qty","detail","label"]
-    : ["ticker","signal","evidence_tier","evidence_reason","evidence_rank","side","rank","score","prime","last","level","dist","age","stop","tgt","time_exit","qty","detail","volx","atr","atr_pct","rs","rs_pct","ern",
+    ? ["ticker","pattern_match","pattern_name","pattern_status","pattern_side","pattern_score","pattern_alignment","action","action_note","evidence_tier","evidence_reason","evidence_rank","trend","trend_adx","signal","trigger","side","rank","score","prime","last","live","live_status","live_dist","atr","atr_pct","rs","rs_pct","level","dist","age","stop","tgt","time_exit","qty","detail","label"]
+    : ["ticker","pattern_match","pattern_name","pattern_status","pattern_side","pattern_score","pattern_alignment","signal","evidence_tier","evidence_reason","evidence_rank","side","rank","score","prime","last","level","dist","age","stop","tgt","time_exit","qty","detail","volx","atr","atr_pct","rs","rs_pct","ern",
        "regime","regime_adx","align","vol_state","vol_src","cell","structure","ivr","iv","rv","vrp","term","opt_liq","opt_oi","opt_spread","label"];
   const head=cols.join(",");
   const lines=view.map(r=>cols.map(c=>{

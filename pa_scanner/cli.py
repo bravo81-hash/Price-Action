@@ -21,6 +21,7 @@ from .snapshot import build_snapshot
 from .strategy_board import build_board, annotate_evidence
 from .report import write_report
 from .webexport import write_web
+from .pattern_integration import annotate_pattern_matches
 
 
 def fetch_vix_backwardation():
@@ -167,8 +168,9 @@ def main():
 
     compute_rank(rows)
     add_exit_levels(rows, market=a.market)
-    rows.sort(key=lambda r: (r.get("evidence_rank", 99),
-                             -r.get("rank", 0), -r["score"]))
+    pattern_meta = annotate_pattern_matches(rows, bundle, bench_daily=bench_daily)
+    print(f"[patterns] {pattern_meta['matched_tickers']}/"
+          f"{pattern_meta['tickers_scanned']} tickers have actionable FVS patterns")
 
     board = build_board(a.market, bench_bias, rows,
                         snap_state=snap["state"])
@@ -178,7 +180,7 @@ def main():
 
     if a.web:
         path = write_web(rows, a.web, scanned=len(bundle), universe=len(syms),
-                         market=a.market, bench=binfo)
+                         market=a.market, bench=binfo, pattern=pattern_meta)
         print(f"[scan] -> {path} (+ dated snapshot)")
         if not a.no_ledger:
             update_ledger(rows, bundle, a.market, out_dir=a.web)
