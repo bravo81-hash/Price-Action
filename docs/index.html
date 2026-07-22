@@ -56,7 +56,7 @@
  tbody tr.data-row{cursor:pointer}
  tbody tr.data-row.open td{background:#172033}
  .inspect-row td{padding:0;border-bottom:1px solid var(--accent);background:#0a0f17}
- .inspect{padding:12px 18px 16px;white-space:normal}
+ .inspect{padding:12px 4px 16px;white-space:normal}
  .inspect-head{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;margin-bottom:8px}
  .inspect-title{font-weight:700;font-size:14px}
  .inspect-meta{color:var(--mut);font-size:11px}
@@ -70,7 +70,7 @@
  .level-chip i{width:9px;height:2px;border-radius:2px;background:var(--level);display:inline-block}
  .level-chip span{color:var(--mut);text-transform:uppercase;font-size:9px;letter-spacing:.35px}
  .level-chip b{color:var(--level);font-variant-numeric:tabular-nums}
- .inspect svg{display:block;width:100%;height:auto;max-height:360px;background:#0d1117;border:1px solid var(--bd);border-radius:6px}
+ .inspect svg{display:block;width:100%;height:auto;background:#0d1117;border:1px solid var(--bd);border-radius:6px}
  .pattern-badge{display:inline-block;padding:1px 6px;border-radius:4px;background:#1f6feb33;color:#79c0ff;font-size:10px;font-weight:700}
  .pattern-badge.conflict{background:#f8514933;color:#ff7b72}
  .pattern-status{color:var(--mut);font-size:9px;margin-left:4px}
@@ -124,6 +124,13 @@
     <span class="chart-label">All charts</span>
     <button id="chartLine" data-global-chart="line">Line</button>
     <button id="chartCandle" data-global-chart="candle">Candles</button>
+  </span>
+  <span class="chart-modes" title="Default history window for every ticker">
+    <span class="chart-label">Range</span>
+    <button data-global-range="3m">3M</button>
+    <button data-global-range="6m">6M</button>
+    <button data-global-range="1y">1Y</button>
+    <button data-global-range="2y">2Y</button>
   </span>
   <button id="colsBtn">Cols ▾</button>
   <button id="reload">↻ Reload</button>
@@ -399,6 +406,10 @@ let market="us", MODE="options", TVP="";
 let chartMode=localStorage.getItem("paChartMode")||"line";
 let chartOverrides={};
 try{chartOverrides=JSON.parse(localStorage.getItem("paChartOverrides")||"{}")||{};}catch(e){}
+let chartRange=localStorage.getItem("paChartRange")||"2y";
+let rangeOverrides={};
+try{rangeOverrides=JSON.parse(localStorage.getItem("paRangeOverrides")||"{}")||{};}catch(e){}
+const RANGE_BARS={"3m":63,"6m":126,"1y":252,"2y":504};
 const ERNWARN = 10;
 
 let COLS = null;   // quality-weighted column model, built in buildCols() after cell helpers
@@ -664,6 +675,9 @@ function render(){
       detail.querySelectorAll("button[data-chart-mode]").forEach(btn=>btn.onclick=e=>{
         e.stopPropagation(); setTickerChartMode(key,btn.dataset.chartMode);
       });
+      detail.querySelectorAll("button[data-chart-range]").forEach(btn=>btn.onclick=e=>{
+        e.stopPropagation(); setTickerChartRange(key,btn.dataset.chartRange);
+      });
       tb.appendChild(detail);
     }
     const tr=document.createElement("tr"); tr.className="data-row"+(expandedKey===key?" open":"");
@@ -675,9 +689,11 @@ function render(){
 }
 function rowKey(r){return [r.ticker,r.signal,r.side,r.action||""].join("|");}
 function chartModeFor(r){return chartOverrides[rowKey(r)]||chartMode;}
+function chartRangeFor(r){return rangeOverrides[rowKey(r)]||chartRange;}
 function syncGlobalChartButtons(){
   $("#chartLine").classList.toggle("on",chartMode==="line");
   $("#chartCandle").classList.toggle("on",chartMode==="candle");
+  document.querySelectorAll("button[data-global-range]").forEach(btn=>btn.classList.toggle("on",btn.dataset.globalRange===chartRange));
 }
 function setGlobalChartMode(mode){
   chartMode=mode; chartOverrides={};
@@ -689,17 +705,28 @@ function setTickerChartMode(key,mode){
   try{localStorage.setItem("paChartOverrides",JSON.stringify(chartOverrides));}catch(e){}
   render();
 }
+function setGlobalChartRange(range){
+  chartRange=range; rangeOverrides={};
+  try{localStorage.setItem("paChartRange",range);localStorage.removeItem("paRangeOverrides");}catch(e){}
+  syncGlobalChartButtons(); render();
+}
+function setTickerChartRange(key,range){
+  rangeOverrides[key]=range;
+  try{localStorage.setItem("paRangeOverrides",JSON.stringify(rangeOverrides));}catch(e){}
+  render();
+}
 function inspectHTML(r){
   const matched=!!r.pattern_match;
   const title=matched?`${r.pattern_name||r.pattern_code} · ${r.pattern_status||""}`:"Price history";
-  const c=chartData(r), mode=chartModeFor(r), dates=c.dates||[];
+  const range=chartRangeFor(r), c=sliceChartData(chartData(r),range), mode=chartModeFor(r), dates=c.dates||[];
   const coverage=dates.length>1?`${dates[0]} to ${dates[dates.length-1]} · ${dates.length} daily bars`:"chart history unavailable";
   const meta=matched
     ? `FVS score ${r.pattern_score??"—"} · ${r.pattern_side||"—"} · room ${r.pattern_room_rr??"—"}R · ${coverage}`
     : `No actionable FVS pattern detected · ${coverage}`;
   const levels=matched?patternLevelChips(r):"";
   const modes=`<span class="chart-modes" title="Chart style for this ticker"><span class="chart-label">This ticker</span><button data-chart-mode="line" class="${mode==="line"?"on":""}">Line</button><button data-chart-mode="candle" class="${mode==="candle"?"on":""}">Candles</button></span>`;
-  return `<div class="inspect"><div class="inspect-head"><span class="inspect-title">${esc(dispSym(r.ticker))} — ${esc(title)}</span><span class="inspect-meta">${esc(meta)}</span>${modes}</div>${levels}${priceChart(r,c,mode)}</div>`;
+  const ranges=`<span class="chart-modes" title="History window for this ticker"><span class="chart-label">Range</span>${Object.keys(RANGE_BARS).map(v=>`<button data-chart-range="${v}" class="${range===v?"on":""}">${v.toUpperCase()}</button>`).join("")}</span>`;
+  return `<div class="inspect"><div class="inspect-head"><span class="inspect-title">${esc(dispSym(r.ticker))} — ${esc(title)}</span><span class="inspect-meta">${esc(meta)}</span>${modes}${ranges}</div>${levels}${priceChart(r,c,mode)}</div>`;
 }
 function patternLevelChips(r){
   return [
@@ -715,6 +742,13 @@ function chartData(r){
     if(c&&Array.isArray(c.close)&&c.close.length>1)return c;
   }
   return {close:r.spark||[],dates:[]};
+}
+function sliceChartData(c,range){
+  const bars=RANGE_BARS[range]||RANGE_BARS["2y"], n=Math.min(bars,(c.close||[]).length), out={};
+  for(const key of ["dates","open","high","low","close"]){
+    if(Array.isArray(c[key]))out[key]=c[key].slice(-n);
+  }
+  return out;
 }
 function chartSeries(c){
   const n=Math.min(...["open","high","low","close"].map(k=>Array.isArray(c[k])?c[k].length:0));
@@ -743,7 +777,7 @@ function priceChart(r,c,mode){
 }
 function lineChart(r,c){
   const raw=(c.close||[]).map(Number), close=raw.filter(Number.isFinite);
-  const n=close.length, W=960,H=330,L=54,R=18,T=18,B=34;
+  const n=close.length, W=1600,H=360,L=54,R=16,T=18,B=34;
   if(n<2) return largeSpark(r);
   const levels=chartLevels(r);
   const vals=[...close,...levels.map(x=>x[0])];
@@ -757,7 +791,7 @@ function lineChart(r,c){
     `<text x="${L}" y="${H-10}" fill="#8b949e" font-size="11">${esc(first)}</text><text x="${W-R}" y="${H-10}" fill="#8b949e" text-anchor="end" font-size="11">${esc(last)}</text><text x="${L-6}" y="${T+10}" fill="#8b949e" text-anchor="end" font-size="10">${hi.toFixed(2)}</text><text x="${L-6}" y="${H-B}" fill="#8b949e" text-anchor="end" font-size="10">${lo.toFixed(2)}</text></svg>`;
 }
 function candleChart(r,c){
-  const n=c.close.length,W=960,H=330,L=54,R=18,T=18,B=34,levels=chartLevels(r);
+  const n=c.close.length,W=1600,H=360,L=54,R=16,T=18,B=34,levels=chartLevels(r);
   const vals=[...c.low,...c.high,...levels.map(x=>x[0])];
   let lo=Math.min(...vals),hi=Math.max(...vals),pad=(hi-lo||1)*.06;lo-=pad;hi+=pad;
   const plotW=W-L-R,x=i=>L+plotW*(i+.5)/n,y=v=>T+(H-T-B)*(hi-v)/(hi-lo||1);
@@ -772,7 +806,7 @@ function candleChart(r,c){
   return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Candlestick chart for ${esc(r.ticker)} with trigger, invalidation and target guides"><line x1="${L}" y1="${T}" x2="${L}" y2="${H-B}" stroke="#30363d"/><line x1="${L}" y1="${H-B}" x2="${W-R}" y2="${H-B}" stroke="#30363d"/>${grid}${guides}${candles}<text x="${L}" y="${H-10}" fill="#8b949e" font-size="11">${esc(first)}</text><text x="${W-R}" y="${H-10}" fill="#8b949e" text-anchor="end" font-size="11">${esc(last)}</text><text x="${L-6}" y="${T+10}" fill="#8b949e" text-anchor="end" font-size="10">${hi.toFixed(2)}</text><text x="${L-6}" y="${H-B}" fill="#8b949e" text-anchor="end" font-size="10">${lo.toFixed(2)}</text></svg>`;
 }
 function largeSpark(r){
-  const a=(r.spark||[]).map(Number).filter(Number.isFinite),W=960,H=260,L=50,R=18,T=18,B=34;
+  const a=(r.spark||[]).map(Number).filter(Number.isFinite),W=1600,H=300,L=50,R=16,T=18,B=34;
   if(a.length<2)return `<div class="inspect-meta">No chart history is available for this row.</div>`;
   let lo=Math.min(...a),hi=Math.max(...a),pad=(hi-lo||1)*.08;lo-=pad;hi+=pad;
   const x=i=>L+(W-L-R)*i/(a.length-1),y=v=>T+(H-T-B)*(hi-v)/(hi-lo||1);
@@ -875,6 +909,7 @@ document.querySelectorAll(".tabs button[data-m]").forEach(b=>b.onclick=()=>selec
 $("#q").oninput=e=>{q=e.target.value.trim().toLowerCase(); render();};
 $("#chartLine").onclick=()=>setGlobalChartMode("line");
 $("#chartCandle").onclick=()=>setGlobalChartMode("candle");
+document.querySelectorAll("button[data-global-range]").forEach(btn=>btn.onclick=()=>setGlobalChartRange(btn.dataset.globalRange));
 syncGlobalChartButtons();
 $("#colsBtn").onclick=()=>{const p=$("#colPanel"); p.style.display=(p.style.display==="block")?"none":"block";};
 $("#reload").onclick=()=>{ const s=$("#snap"); load(s.value||"latest"); };
