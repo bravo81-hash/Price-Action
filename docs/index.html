@@ -60,6 +60,12 @@
  .inspect-head{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;margin-bottom:8px}
  .inspect-title{font-weight:700;font-size:14px}
  .inspect-meta{color:var(--mut);font-size:11px}
+ .pattern-levels{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 9px}
+ .level-chip{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;
+   border:1px solid var(--bd);border-radius:999px;background:var(--panel);font-size:11px}
+ .level-chip i{width:9px;height:2px;border-radius:2px;background:var(--level);display:inline-block}
+ .level-chip span{color:var(--mut);text-transform:uppercase;font-size:9px;letter-spacing:.35px}
+ .level-chip b{color:var(--level);font-variant-numeric:tabular-nums}
  .inspect svg{display:block;width:100%;height:auto;max-height:360px;background:#0d1117;border:1px solid var(--bd);border-radius:6px}
  .pattern-badge{display:inline-block;padding:1px 6px;border-radius:4px;background:#1f6feb33;color:#79c0ff;font-size:10px;font-weight:700}
  .pattern-badge.conflict{background:#f8514933;color:#ff7b72}
@@ -657,32 +663,38 @@ function inspectHTML(r){
   const matched=!!(r.pattern_chart&&Array.isArray(r.pattern_chart.close)&&r.pattern_chart.close.length>1);
   const title=matched?`${r.pattern_name||r.pattern_code} · ${r.pattern_status||""}`:"Price history";
   const meta=matched
-    ? `FVS score ${r.pattern_score??"—"} · ${r.pattern_side||"—"} · trigger ${r.pattern_trigger??"—"} · invalidation ${r.pattern_invalidation??"—"} · target ${r.pattern_target??"—"} · room ${r.pattern_room_rr??"—"}R`
+    ? `FVS score ${r.pattern_score??"—"} · ${r.pattern_side||"—"} · room ${r.pattern_room_rr??"—"}R`
     : "Expanded close-price view; no actionable FVS pattern detected.";
-  return `<div class="inspect"><div class="inspect-head"><span class="inspect-title">${esc(dispSym(r.ticker))} — ${esc(title)}</span><span class="inspect-meta">${esc(meta)}</span></div>${matched?candleChart(r):largeSpark(r)}</div>`;
+  const levels=matched?patternLevelChips(r):"";
+  return `<div class="inspect"><div class="inspect-head"><span class="inspect-title">${esc(dispSym(r.ticker))} — ${esc(title)}</span><span class="inspect-meta">${esc(meta)}</span></div>${levels}${matched?patternLineChart(r):largeSpark(r)}</div>`;
 }
-function candleChart(r){
-  const c=r.pattern_chart, close=c.close||[], high=c.high||close, low=c.low||close, open=c.open||close;
-  const n=Math.min(close.length,high.length,low.length,open.length), W=960,H=330,L=54,R=18,T=18,B=34;
+function patternLevelChips(r){
+  return [
+    ["Trigger",r.pattern_trigger,"#58a6ff"],
+    ["Invalidation",r.pattern_invalidation,"#f85149"],
+    ["Target",r.pattern_target,"#3fb950"]
+  ].filter(x=>Number.isFinite(Number(x[1]))).map(([label,value,color])=>
+    `<span class="level-chip" style="--level:${color}"><i></i><span>${label}</span><b>${esc(String(value))}</b></span>`
+  ).join("");
+}
+function patternLineChart(r){
+  const c=r.pattern_chart, close=(c.close||[]).map(Number).filter(Number.isFinite);
+  const n=close.length, W=960,H=330,L=54,R=18,T=18,B=34;
+  if(n<2) return largeSpark(r);
   const levels=[
-    [Number(r.pattern_trigger),"trigger","#58a6ff"],
-    [Number(r.pattern_invalidation),"invalid","#f85149"],
-    [Number(r.pattern_target),"target","#3fb950"]
+    [Number(r.pattern_trigger),"#58a6ff"],
+    [Number(r.pattern_invalidation),"#f85149"],
+    [Number(r.pattern_target),"#3fb950"]
   ].filter(x=>Number.isFinite(x[0]));
-  const vals=[...high.slice(0,n),...low.slice(0,n),...levels.map(x=>x[0])].filter(Number.isFinite);
-  if(!vals.length) return largeSpark(r);
+  const vals=[...close,...levels.map(x=>x[0])];
   let lo=Math.min(...vals),hi=Math.max(...vals),pad=(hi-lo||1)*.06; lo-=pad;hi+=pad;
-  const x=i=>L+(W-L-R)*(i+.5)/n, y=v=>T+(H-T-B)*(hi-v)/(hi-lo||1), cw=Math.max(1,Math.min(5,(W-L-R)/n*.65));
-  let marks="";
-  for(let i=0;i<n;i++){
-    const o=Number(open[i]),cl=Number(close[i]),h=Number(high[i]),l=Number(low[i]); if(![o,cl,h,l].every(Number.isFinite))continue;
-    const color=cl>=o?"#3fb950":"#f85149", yy=Math.min(y(o),y(cl)), bh=Math.max(1,Math.abs(y(o)-y(cl)));
-    marks+=`<line x1="${x(i)}" y1="${y(h)}" x2="${x(i)}" y2="${y(l)}" stroke="${color}" stroke-width="1"/><rect x="${x(i)-cw/2}" y="${yy}" width="${cw}" height="${bh}" fill="${color}"/>`;
-  }
-  let guides="";
-  for(const [v,label,color] of levels) guides+=`<line x1="${L}" y1="${y(v)}" x2="${W-R}" y2="${y(v)}" stroke="${color}" stroke-dasharray="6 4" opacity=".8"/><text x="${W-R-4}" y="${y(v)-4}" fill="${color}" text-anchor="end" font-size="11">${label} ${v}</text>`;
+  const x=i=>L+(W-L-R)*i/(n-1), y=v=>T+(H-T-B)*(hi-v)/(hi-lo||1);
+  const points=close.map((v,i)=>`${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const grid=[.25,.5,.75].map(p=>`<line x1="${L}" y1="${(T+(H-T-B)*p).toFixed(1)}" x2="${W-R}" y2="${(T+(H-T-B)*p).toFixed(1)}" stroke="#21262d"/>`).join("");
+  const guides=levels.map(([v,color])=>`<line x1="${L}" y1="${y(v)}" x2="${W-R}" y2="${y(v)}" stroke="${color}" stroke-dasharray="6 4" opacity=".65"/>`).join("");
   const date=c.dates||[], first=date[0]||"", last=date[n-1]||"";
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Candlestick chart for ${esc(r.ticker)}"><line x1="${L}" y1="${T}" x2="${L}" y2="${H-B}" stroke="#30363d"/><line x1="${L}" y1="${H-B}" x2="${W-R}" y2="${H-B}" stroke="#30363d"/>${guides}${marks}<text x="${L}" y="${H-10}" fill="#8b949e" font-size="11">${esc(first)}</text><text x="${W-R}" y="${H-10}" fill="#8b949e" text-anchor="end" font-size="11">${esc(last)}</text><text x="${L-6}" y="${T+10}" fill="#8b949e" text-anchor="end" font-size="10">${hi.toFixed(2)}</text><text x="${L-6}" y="${H-B}" fill="#8b949e" text-anchor="end" font-size="10">${lo.toFixed(2)}</text></svg>`;
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Line chart for ${esc(r.ticker)} with trigger, invalidation and target guides"><line x1="${L}" y1="${T}" x2="${L}" y2="${H-B}" stroke="#30363d"/><line x1="${L}" y1="${H-B}" x2="${W-R}" y2="${H-B}" stroke="#30363d"/>${grid}${guides}<polyline fill="none" stroke="#79c0ff" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="${points}"/><circle cx="${x(n-1)}" cy="${y(close[n-1])}" r="3" fill="#e6edf3"/>`+
+    `<text x="${L}" y="${H-10}" fill="#8b949e" font-size="11">${esc(first)}</text><text x="${W-R}" y="${H-10}" fill="#8b949e" text-anchor="end" font-size="11">${esc(last)}</text><text x="${L-6}" y="${T+10}" fill="#8b949e" text-anchor="end" font-size="10">${hi.toFixed(2)}</text><text x="${L-6}" y="${H-B}" fill="#8b949e" text-anchor="end" font-size="10">${lo.toFixed(2)}</text></svg>`;
 }
 function largeSpark(r){
   const a=(r.spark||[]).map(Number).filter(Number.isFinite),W=960,H=260,L=50,R=18,T=18,B=34;
