@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -49,6 +50,11 @@ class ChartHistoryTests(unittest.TestCase):
                          "chart": chart})
 
         self.assertEqual(exported["chart"], chart)
+
+    def test_dashboard_does_not_turn_missing_pattern_levels_into_zero(self):
+        dashboard = (Path(__file__).parents[1] / "docs" / "index.html").read_text()
+
+        self.assertIn('x[0]!==null&&x[0]!==undefined&&x[0]!==""', dashboard)
 
 
 if __name__ == "__main__":

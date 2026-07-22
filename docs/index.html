@@ -728,10 +728,11 @@ function chartSeries(c){
 }
 function chartLevels(r){
   return [
-    [Number(r.pattern_trigger),"#58a6ff"],
-    [Number(r.pattern_invalidation),"#f85149"],
-    [Number(r.pattern_target),"#3fb950"]
-  ].filter(x=>Number.isFinite(x[0]));
+    [r.pattern_trigger,"#58a6ff"],
+    [r.pattern_invalidation,"#f85149"],
+    [r.pattern_target,"#3fb950"]
+  ].filter(x=>x[0]!==null&&x[0]!==undefined&&x[0]!==""&&Number.isFinite(Number(x[0])))
+    .map(([value,color])=>[Number(value),color]);
 }
 function priceChart(r,c,mode){
   if(mode==="candle"){
