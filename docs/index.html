@@ -15,11 +15,15 @@
    flex-wrap:wrap;align-items:baseline;gap:8px 18px}
  h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.3px}
  .meta{color:var(--mut);font-size:12px}
- .tabs{padding:10px 20px 0;display:flex;gap:6px;border-bottom:1px solid var(--bd)}
+ .tabs{padding:10px 20px 0;display:flex;flex-wrap:wrap;gap:6px;border-bottom:1px solid var(--bd)}
  .tabs button{background:transparent;border:1px solid var(--bd);border-bottom:none;
    color:var(--mut);padding:7px 16px;border-radius:7px 7px 0 0;cursor:pointer;font:inherit}
  .tabs button:hover{color:var(--fg)}
  .tabs button.on{background:var(--panel);color:var(--fg);border-color:var(--accent)}
+ .chrome-toggles{margin-left:auto;display:flex;flex-wrap:wrap;gap:5px;padding-bottom:6px}
+ .tabs .chrome-toggle{border:1px solid var(--bd);border-radius:5px;padding:4px 9px;background:var(--panel);color:var(--mut)}
+ .tabs .chrome-toggle:hover{color:var(--fg);border-color:var(--accent)}
+ .is-collapsed{display:none!important}
  .bar{padding:12px 20px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;
    border-bottom:1px solid var(--bd)}
  .bar input,.bar select{background:var(--panel);border:1px solid var(--bd);color:var(--fg);
@@ -49,9 +53,10 @@
  .spacer{flex:1}
  .banner{padding:8px 20px;background:#3b2e0a;color:var(--warn);
    border-bottom:1px solid var(--bd);font-size:12px;display:none}
- .table-shell{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain}
- table{width:100%;min-width:max-content;border-collapse:collapse}
- th,td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--bd);white-space:nowrap}
+ .table-shell{flex:1;min-height:0;max-width:100%;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain}
+ table{width:100%;min-width:0;max-width:100%;table-layout:fixed;border-collapse:collapse}
+ th,td{padding:8px clamp(4px,.55vw,12px);text-align:left;border-bottom:1px solid var(--bd);
+   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
  th{position:sticky;top:0;z-index:5;background:var(--panel);cursor:pointer;color:var(--mut);
    font-weight:600;user-select:none}
  th:hover{color:var(--fg)}
@@ -59,8 +64,8 @@
  tr:hover td{background:#1c2230}
  tbody tr.data-row{cursor:pointer}
  tbody tr.data-row.open td{background:#172033}
- .inspect-row td{padding:0;border-bottom:1px solid var(--accent);background:#0a0f17}
- .inspect{padding:12px 4px 16px;white-space:normal}
+ .inspect-row td{padding:0;overflow:visible;text-overflow:clip;border-bottom:1px solid var(--accent);background:#0a0f17}
+ .inspect{padding:12px clamp(14px,1.25vw,24px) 16px;white-space:normal;max-width:100%}
  .inspect-head{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;margin-bottom:8px}
  .inspect-title{font-weight:700;font-size:14px}
  .inspect-meta{color:var(--mut);font-size:11px}
@@ -74,7 +79,7 @@
  .level-chip i{width:9px;height:2px;border-radius:2px;background:var(--level);display:inline-block}
  .level-chip span{color:var(--mut);text-transform:uppercase;font-size:9px;letter-spacing:.35px}
  .level-chip b{color:var(--level);font-variant-numeric:tabular-nums}
- .inspect svg{display:block;width:100%;height:auto;background:#0d1117;border:1px solid var(--bd);border-radius:6px}
+ .inspect svg{display:block;width:100%;max-width:100%;height:auto;overflow:hidden;background:#0d1117;border:1px solid var(--bd);border-radius:6px}
  .pattern-badge{display:inline-block;padding:1px 6px;border-radius:4px;background:#1f6feb33;color:#79c0ff;font-size:10px;font-weight:700}
  .pattern-badge.conflict{background:#f8514933;color:#ff7b72}
  .pattern-status{color:var(--mut);font-size:9px;margin-left:4px}
@@ -105,7 +110,7 @@
  .pos{color:var(--grn)} .neg{color:var(--red)} .neu{color:var(--mut)}
  .ref code{background:#1c2230;padding:1px 5px;border-radius:4px;font-size:11.5px}
 </style></head><body>
-<header>
+<header id="pageHead">
   <h1 id="title">PRICE-ACTION SCAN</h1>
   <span class="meta" id="gen">loading…</span>
   <span class="meta" id="counts"></span>
@@ -116,10 +121,15 @@
   <button data-m="in">India</button>
   <button data-m="backtest">Backtest</button>
   <button data-m="guide">Guide</button>
+  <span class="chrome-toggles" aria-label="Dashboard sections">
+    <button class="chrome-toggle" data-chrome="header" type="button">Header ▴</button>
+    <button class="chrome-toggle" data-chrome="board" type="button">Strategies ▴</button>
+    <button class="chrome-toggle" data-chrome="filters" type="button">Filters ▴</button>
+  </span>
 </div>
 <div class="banner" id="banner"></div>
 <div class="board" id="board"></div>
-<div class="bar">
+<div class="bar" id="filterBar">
   <select id="snap" title="snapshot"></select>
   <input id="q" placeholder="filter ticker…">
   <span id="filters"></span>
@@ -417,6 +427,10 @@ let rangeOverrides={};
 try{rangeOverrides=JSON.parse(localStorage.getItem("paRangeOverrides")||"{}")||{};}catch(e){}
 const RANGE_BARS={"3m":63,"6m":126,"1y":252,"2y":504};
 const ERNWARN = 10;
+const CHROME_TARGETS={header:"#pageHead",board:"#board",filters:"#filterBar"};
+const CHROME_LABELS={header:"Header",board:"Strategies",filters:"Filters"};
+let chromeState={header:false,board:false,filters:false};
+try{chromeState={...chromeState,...JSON.parse(localStorage.getItem("paChromeState")||"{}")};}catch(e){}
 
 let COLS = null;   // quality-weighted column model, built in buildCols() after cell helpers
 let prefs = {order:null, hidden:[], widths:{}};
@@ -439,6 +453,18 @@ function buildFilters(){
       b.classList.add("on"); render(); };
     fb.appendChild(b);
   });
+}
+function applyChromeState(){
+  for(const [name,selector] of Object.entries(CHROME_TARGETS)){
+    const collapsed=!!chromeState[name],target=$(selector),btn=document.querySelector(`[data-chrome="${name}"]`);
+    if(target)target.classList.toggle("is-collapsed",collapsed);
+    if(btn){btn.textContent=`${CHROME_LABELS[name]} ${collapsed?"▾":"▴"}`;btn.setAttribute("aria-expanded",String(!collapsed));}
+  }
+}
+function toggleChrome(name){
+  chromeState[name]=!chromeState[name];
+  try{localStorage.setItem("paChromeState",JSON.stringify(chromeState));}catch(e){}
+  applyChromeState();
 }
 
 /* ---------- quality-weighted column model (order = default priority) ---------- */
@@ -508,7 +534,7 @@ function patternCell(r){
     `<span class="pattern-status">${esc(r.pattern_status||"")}</span>`;
 }
 
-function prefKey(){return "paCols.v3."+MODE;}
+function prefKey(){return "paCols.v4."+MODE;}
 function loadPrefs(){ prefs={order:null,hidden:[],widths:{}};
   try{const p=JSON.parse(localStorage.getItem(prefKey()));if(p)prefs={order:p.order||null,hidden:p.hidden||[],widths:p.widths||{}};}catch(e){} }
 function savePrefs(){try{localStorage.setItem(prefKey(),JSON.stringify(prefs));}catch(e){}}
@@ -522,13 +548,26 @@ function orderedCols(){
 function visibleCols(){return orderedCols().filter(c=>!prefs.hidden.includes(c.k));}
 
 let dragK=null;
+function defaultColWeight(c){
+  const w={ticker:1.15,pattern_priority:1.8,signal:1.05,evidence_rank:1.55,side:.9,
+    rank:.75,rs_pct:.75,vol_state:1.05,ern:.85,age:.7,score:.9,live:1.2,last:.95,
+    stop:.95,tgt:.95,qty:.7,level:.95,dist:1.35,structure:1.45,regime:1.45,
+    opt_liq:1.25,volx:.75,atr:.75,atr_pct:.8,detail:1.8,spark:1.5,tv:.6,
+    action:1.25,trend:1.35,trigger:1.15};
+  return w[c.k]||1;
+}
+function applyHeadWidths(){
+  const hs=[...$("#head").children];
+  const weights=hs.map(th=>Number(prefs.widths[th.dataset.k])||defaultColWeight(visibleCols().find(c=>c.k===th.dataset.k)||{}));
+  const total=weights.reduce((a,b)=>a+b,0)||1;
+  hs.forEach((th,i)=>th.style.width=(weights[i]/total*100).toFixed(4)+"%");
+}
 function buildHead(){
   const hr=$("#head"); hr.innerHTML="";
   for(const c of visibleCols()){
     const th=document.createElement("th");
     th.dataset.k=c.k; th.textContent=c.l;
     if(c.cls) th.className=c.cls;
-    if(prefs.widths[c.k]) th.style.width=prefs.widths[c.k]+"px";
     if(!c.nosort) th.onclick=()=>{ if(sortK===c.k) sortDir*=-1;
       else {sortK=c.k; sortDir=["ticker","detail","side","action","trend","trigger","evidence_rank"].includes(c.k)?1:-1;} render(); };
     th.draggable=true;
@@ -540,14 +579,20 @@ function buildHead(){
       prefs.order=ord; savePrefs(); rebuildCols(); dragK=null;};
     const rz=document.createElement("span"); rz.className="rz";
     rz.onpointerdown=e=>{e.stopPropagation(); e.preventDefault();
-      const sx=e.clientX, w0=th.offsetWidth;
-      const mv=ev=>{const w=Math.max(50,w0+ev.clientX-sx); th.style.width=w+"px"; prefs.widths[c.k]=w;};
-      const up=()=>{document.removeEventListener("pointermove",mv);document.removeEventListener("pointerup",up);savePrefs();};
+      const hs=[...hr.children], i=hs.indexOf(th), other=hs[i+1]||hs[i-1];
+      if(!other)return;
+      const sx=e.clientX,w0=th.getBoundingClientRect().width,ow0=other.getBoundingClientRect().width;
+      const pair=w0+ow0,min=Math.min(42,pair*.35),tableW=$("#t").clientWidth||1;
+      const mv=ev=>{const w=Math.max(min,Math.min(pair-min,w0+ev.clientX-sx));
+        th.style.width=(w/tableW*100)+"%";other.style.width=((pair-w)/tableW*100)+"%";};
+      const up=()=>{document.removeEventListener("pointermove",mv);document.removeEventListener("pointerup",up);
+        [...hr.children].forEach(h=>prefs.widths[h.dataset.k]=h.getBoundingClientRect().width);savePrefs();};
       document.addEventListener("pointermove",mv);document.addEventListener("pointerup",up);};
     rz.onclick=e=>e.stopPropagation();
     th.appendChild(rz);
     hr.appendChild(th);
   }
+  applyHeadWidths();
 }
 function buildColPanel(){
   const p=$("#colPanel"); if(!p) return; p.innerHTML="";
@@ -677,6 +722,7 @@ function render(){
     const key=rowKey(r);
     const tr=document.createElement("tr"); tr.className="data-row"+(expandedKey===key?" open":"");
     tr.dataset.key=key; tr.title="Click to inspect or collapse chart"; tr.innerHTML=rowHTML(r);
+    tr.querySelectorAll("td").forEach(td=>{const value=td.innerText.trim();if(value)td.title=value;});
     tr.onclick=e=>{if(e.target.closest("a,button,input,select"))return; expandedKey=expandedKey===key?null:key; render();};
     tb.appendChild(tr);
     if(expandedKey===key){
@@ -783,7 +829,7 @@ function priceChart(r,c,mode){
 }
 function lineChart(r,c){
   const raw=(c.close||[]).map(Number), close=raw.filter(Number.isFinite);
-  const n=close.length, W=1600,H=360,L=54,R=16,T=18,B=34;
+  const n=close.length, W=1600,H=360,L=64,R=48,T=18,B=34;
   if(n<2) return largeSpark(r);
   const levels=chartLevels(r);
   const vals=[...close,...levels.map(x=>x[0])];
@@ -797,7 +843,7 @@ function lineChart(r,c){
     `<text x="${L}" y="${H-10}" fill="#8b949e" font-size="11">${esc(first)}</text><text x="${W-R}" y="${H-10}" fill="#8b949e" text-anchor="end" font-size="11">${esc(last)}</text><text x="${L-6}" y="${T+10}" fill="#8b949e" text-anchor="end" font-size="10">${hi.toFixed(2)}</text><text x="${L-6}" y="${H-B}" fill="#8b949e" text-anchor="end" font-size="10">${lo.toFixed(2)}</text></svg>`;
 }
 function candleChart(r,c){
-  const n=c.close.length,W=1600,H=360,L=54,R=16,T=18,B=34,levels=chartLevels(r);
+  const n=c.close.length,W=1600,H=360,L=64,R=48,T=18,B=34,levels=chartLevels(r);
   const vals=[...c.low,...c.high,...levels.map(x=>x[0])];
   let lo=Math.min(...vals),hi=Math.max(...vals),pad=(hi-lo||1)*.06;lo-=pad;hi+=pad;
   const plotW=W-L-R,x=i=>L+plotW*(i+.5)/n,y=v=>T+(H-T-B)*(hi-v)/(hi-lo||1);
@@ -812,7 +858,7 @@ function candleChart(r,c){
   return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Candlestick chart for ${esc(r.ticker)} with trigger, invalidation and target guides"><line x1="${L}" y1="${T}" x2="${L}" y2="${H-B}" stroke="#30363d"/><line x1="${L}" y1="${H-B}" x2="${W-R}" y2="${H-B}" stroke="#30363d"/>${grid}${guides}${candles}<text x="${L}" y="${H-10}" fill="#8b949e" font-size="11">${esc(first)}</text><text x="${W-R}" y="${H-10}" fill="#8b949e" text-anchor="end" font-size="11">${esc(last)}</text><text x="${L-6}" y="${T+10}" fill="#8b949e" text-anchor="end" font-size="10">${hi.toFixed(2)}</text><text x="${L-6}" y="${H-B}" fill="#8b949e" text-anchor="end" font-size="10">${lo.toFixed(2)}</text></svg>`;
 }
 function largeSpark(r){
-  const a=(r.spark||[]).map(Number).filter(Number.isFinite),W=1600,H=300,L=50,R=16,T=18,B=34;
+  const a=(r.spark||[]).map(Number).filter(Number.isFinite),W=1600,H=300,L=64,R=48,T=18,B=34;
   if(a.length<2)return `<div class="inspect-meta">No chart history is available for this row.</div>`;
   let lo=Math.min(...a),hi=Math.max(...a),pad=(hi-lo||1)*.08;lo-=pad;hi+=pad;
   const x=i=>L+(W-L-R)*i/(a.length-1),y=v=>T+(H-T-B)*(hi-v)/(hi-lo||1);
@@ -890,7 +936,7 @@ async function initSnaps(){
 function toggleView(m){
   const isRef = (m==="backtest" || m==="guide");
   $(".bar").style.display = isRef ? "none" : "flex";
-  $("#tableShell").style.display = isRef ? "none" : "";
+  $("#tableShell").style.display = isRef ? "none" : "block";
   $("#state").style.display = "none";
   $("#banner").style.display = "none";
   $("#gen").textContent = isRef ? "" : $("#gen").textContent;
@@ -912,6 +958,8 @@ async function selectMarket(m){
   await load("latest");
 }
 document.querySelectorAll(".tabs button[data-m]").forEach(b=>b.onclick=()=>selectMarket(b.dataset.m));
+document.querySelectorAll("button[data-chrome]").forEach(b=>b.onclick=()=>toggleChrome(b.dataset.chrome));
+applyChromeState();
 $("#q").oninput=e=>{q=e.target.value.trim().toLowerCase(); render();};
 $("#chartLine").onclick=()=>setGlobalChartMode("line");
 $("#chartCandle").onclick=()=>setGlobalChartMode("candle");
