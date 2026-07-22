@@ -71,6 +71,22 @@ class ChartHistoryTests(unittest.TestCase):
         self.assertNotIn("max-height:360px", dashboard)
         self.assertGreaterEqual(dashboard.count("W=1600"), 3)
 
+    def test_dashboard_places_inspection_chart_after_clicked_row(self):
+        dashboard = (Path(__file__).parents[1] / "docs" / "index.html").read_text()
+
+        row_append = dashboard.index('tb.appendChild(tr);')
+        detail_append = dashboard.index('tb.appendChild(detail);', row_append)
+        self.assertLess(row_append, detail_append)
+
+    def test_dashboard_scrolls_only_the_ticker_table(self):
+        dashboard = (Path(__file__).parents[1] / "docs" / "index.html").read_text()
+
+        self.assertIn('id="tableShell" class="table-shell"', dashboard)
+        self.assertIn('.table-shell{flex:1;min-height:0;overflow:auto', dashboard)
+        self.assertIn('height:100dvh;overflow:hidden;display:flex;flex-direction:column', dashboard)
+        self.assertIn('header,.tabs,.banner,.board,.bar{flex:0 0 auto}', dashboard)
+        self.assertIn('th{position:sticky;top:0;z-index:5', dashboard)
+
 
 if __name__ == "__main__":
     unittest.main()
