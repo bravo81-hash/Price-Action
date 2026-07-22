@@ -51,6 +51,7 @@ def _row(r: dict) -> dict:
         d["dist"] = ""
         d["volx"] = ""
     d["spark"] = r.get("spark", [])
+    d["chart"] = r.get("chart", {})
     return d
 
 

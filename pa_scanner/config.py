@@ -146,6 +146,7 @@ class Config:
 
     # --- report ---
     spark_bars: int = 40
+    chart_bars: int = 504             # two trading years for expandable charts
 
 
 CFG = Config()

@@ -46,8 +46,9 @@ python -m pa_scanner.cli --tickers AAPL MSFT NVDA SPY   # ad-hoc list
 ```
 
 Open the resulting HTML in any browser. The table sorts, filters, exports CSV,
-and links each row to TradingView. Click any row to expand or collapse its chart
-immediately above the row. Actionable chart-pattern matches include a detailed
+and links each row to TradingView. Click any row to expand or collapse its two-year chart
+immediately above the row. Use the global Line/Candles control for the whole list, or override
+the chart style inside an individual ticker. Actionable chart-pattern matches include a detailed
 candlestick view with trigger, invalidation and target levels.
 
 ## Forward-Vol-Scanner integration

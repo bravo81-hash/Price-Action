@@ -1,5 +1,5 @@
 """Scanner orchestration: prepare per-symbol context, then run all rules."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
@@ -37,6 +37,7 @@ class SymbolContext:
     don_hi: float
     don_lo: float
     spark: list
+    chart: dict = field(default_factory=dict)
     # --- S3 range / chop ---
     adx_last: float = 0.0
     range_hi: float = 0.0
@@ -182,6 +183,15 @@ def prepare_context(ticker, daily, weekly):
     last3 = d["close"].iloc[-3:]
     s3_edge_closes = int(((last3 > r_hi - edge_band) | (last3 < r_lo + edge_band)).sum())
 
+    chart_df = d[["open", "high", "low", "close"]].dropna().tail(CFG.chart_bars)
+    chart = {
+        "dates": [pd.Timestamp(x).date().isoformat() for x in chart_df.index],
+        "open": [round(float(x), 4) for x in chart_df["open"]],
+        "high": [round(float(x), 4) for x in chart_df["high"]],
+        "low": [round(float(x), 4) for x in chart_df["low"]],
+        "close": [round(float(x), 4) for x in chart_df["close"]],
+    }
+
     return SymbolContext(
         ticker=ticker, last_close=price, atr_last=atr_last,
         vol_last=float(last["volume"]),
@@ -194,6 +204,7 @@ def prepare_context(ticker, daily, weekly):
         pullback_up_depth=depth_up, pullback_dn_depth=depth_dn,
         don_hi=dh, don_lo=dlo,
         spark=[round(x, 4) for x in d["close"].tail(CFG.spark_bars).tolist()],
+        chart=chart,
         adx_last=adx_last, range_hi=r_hi, range_lo=r_lo, range_pos=range_pos,
         range_width_pct=range_width_pct, ema_sep_pct=ema_sep_pct, range_crosses=range_crosses,
         last_low=float(last["low"]), last_high=float(last["high"]),
@@ -222,6 +233,7 @@ def scan(bundle: dict) -> list:
                         "atr_pct": (round(ctx.atr_last / ctx.last_close * 100, 2)
                                     if ctx.last_close else None),
                         "spark": ctx.spark,
+                        "chart": ctx.chart,
                         **sig.meta,
                     })
         except Exception:
