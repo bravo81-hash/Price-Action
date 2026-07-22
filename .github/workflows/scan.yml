@@ -1,6 +1,10 @@
 name: scan
 
 on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/data/**"
   schedule:
     # 22:30 UTC on weekdays — after the US cash close (handles EST/EDT).
     # GitHub may delay scheduled runs under load; trigger manually if needed.
