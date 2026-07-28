@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "source_commit": "537f4f0127470e0ba74c595a5b247ae4ebc608b4",
+  "parity_date": "2026-07-28",
+  "pine_file": "pa_confirm_v3.pine",
+  "signals": [
+    "S1",
+    "S2",
+    "S3",
+    "S4"
+  ],
+  "markets": {
+    "US": {
+      "benchmark": "AMEX:SPY",
+      "S1": "CONTEXT",
+      "S2": "CAUTION",
+      "S3": "PREFERRED",
+      "S4": "EXPERIMENTAL"
+    },
+    "ASX": {
+      "benchmark": "ASX:XJO",
+      "S1": "CONTEXT",
+      "S2": "CONTEXT",
+      "S3": "CONTEXT",
+      "S4": "AVOID"
+    },
+    "India": {
+      "benchmark": "NSE:NIFTY",
+      "S1_short": "PREFERRED_EXIT_FLAG",
+      "S2_long": "EXPERIMENTAL",
+      "S3": "CONTEXT",
+      "S4": "CONTEXT"
+    }
+  },
+  "risk_templates": {
+    "standard": {
+      "stop_atr": 2.0,
+      "target_atr": 1.5,
+      "time_bars": 10
+    },
+    "S4_US": {
+      "time_bars": 5
+    },
+    "India_S2_long": {
+      "stop_atr": 3.5,
+      "target_atr": 4.5,
+      "time_bars": 63
+    },
+    "ASX_S4": {
+      "stop_atr": 3.5,
+      "target_atr": 4.5,
+      "time_bars": 63
+    }
+  }
+}
