@@ -500,19 +500,25 @@ pa_scanner/
   selftest.py     synthetic-data tests (python -m pa_scanner.selftest)
 ```
 
-## Pine indicator (`pa_confirm.pine`)
+## Pine indicators
 
-TradingView Pine v6, overlay. Run on the **Daily** timeframe. Plots weekly S/R
-lines, marks S1/S2 long/short on the chart, and exposes alert conditions.
+`pa_confirm_v3.pine` is the current TradingView Pine v6 companion. Run it on
+the **Daily** timeframe. It marks S1-S4, supports US/ASX/India market templates,
+and exposes raw detection separately from evidence and action authority.
+`pa_confirm.pine` remains the v2 compatibility copy; the exact archive is at
+`tradingview/archive/pa_confirm_v2.pine`.
 
-**On-chart:** add to a daily chart, set alerts on the four conditions.
+**On-chart:** select the market template, confirm the benchmark symbol, and set
+context alerts. The authority panel distinguishes signal, evidence and action.
 
 **Pine Screener (Premium):**
 1. Add the indicator to your chart, then star it into **Favorites**.
 2. Open the **Pine Screener** (Products → Screeners → Pine).
 3. Choose your watchlist and set the interval to **1D**.
-4. Filter on the data-window columns `S1_Long`, `S1_Short`, `S2_Long`,
-   `S2_Short`, or `AnySignal` ( = 1 means a hit ). `WeeklyTrend` = 1/-1/0.
+4. Filter on `S1_Long`, `S1_Short`, `S2_Long`, `S2_Short`, `S3_Neutral`,
+   `S4_Long`, or `SignalConfirmed`. Use `EvidenceTier`,
+   `EntryAuthorised`, `ExitOrReduce`, `Stop`, `Target` and `TimeBars` for
+   evidence-aware review. `WeeklyTrend` and `DailyTrend` are 1/-1/0.
 5. Evaluate after the daily close for confirmed signals.
 
 The Pine weekly S/R uses the latest confirmed weekly pivot high/low (lighter than
