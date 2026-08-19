@@ -890,7 +890,9 @@ function applyData(d){
   MODE = d.mode || "options";
   TVP  = d.tv || "";
   $("#title").textContent = "PRICE-ACTION SCAN — " + (d.label || LABEL[market] || "");
-  $("#gen").textContent = d.generated ? "updated " + d.generated.replace("T"," ").replace("Z"," UTC") : "";
+  const staleTxt = d.stale ? `  ⚠ STALE DATA — newest candle ${d.stale.latest_bar}, ${d.stale.missing_sessions} session(s) behind the last close (${d.stale.expected_session}); pre-market run` : "";
+  $("#gen").textContent = (d.generated ? "updated " + d.generated.replace("T"," ").replace("Z"," UTC") : "") + staleTxt;
+  $("#gen").style.color = d.stale ? "var(--warn)" : "";
   const snapTxt = (d.bench && d.bench.snap) ? ` · ${d.bench.snap.state} — ${d.bench.snap.guidance} [context]` : "";
   const bench = d.bench ? ` · ${d.bench.symbol}: ${String(d.bench.bias).toUpperCase()} (ADX ${d.bench.adx})${snapTxt}` : "";
   const pm=d.pattern_scanner?` · pattern tickers ${d.pattern_scanner.matched_tickers??0}`:"";

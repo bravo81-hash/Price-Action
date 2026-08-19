@@ -8,11 +8,13 @@ Examples:
   python -m pa_scanner.cli --tickers AAPL MSFT NVDA SPY
 """
 import argparse
+import datetime as dt
 import sys
 
 from .config import CFG, MARKETS
 from . import universe as uni
 from . import data as dl
+from .freshness import check_freshness, latest_bar_date, representative_bar_date
 from .scanner import scan, add_regime, add_market_context, compute_rank, add_exit_levels, mark_prime, add_live_directional
 from .action import add_action
 from .earnings import annotate_earnings
@@ -62,6 +64,10 @@ def main():
                     help="US: skip days-to-earnings enrichment")
     ap.add_argument("--no-ledger", action="store_true",
                     help="skip forward-ledger update")
+    ap.add_argument("--allow-stale", action="store_true",
+                    help="publish even if the newest candle is behind the last "
+                         "completed session (e.g. a pre-market run); records a "
+                         "stale flag in the snapshot instead of skipping")
     ap.add_argument("--tws", action="store_true",
                     help="prefer the TWS vol provider (stub for now; falls back to approx)")
     ap.add_argument("--live", action="store_true",
@@ -108,6 +114,19 @@ def main():
             continue
         bundle[t] = (d, dl.to_weekly(d))
     print(f"[scan] {len(bundle)} liquid symbols; running rules...")
+
+    # Freshness guard: a run that fires before the last completed session has
+    # posted would publish a dashboard whose candles are a session stale. Gate
+    # on the *bulk* of the charted (liquid) universe, not a lone early symbol.
+    liquid_frames = [d for d, _ in bundle.values()]
+    fresh = check_freshness(representative_bar_date(liquid_frames), a.market,
+                            dt.datetime.now(dt.timezone.utc),
+                            freshest=latest_bar_date(liquid_frames))
+    if fresh["stale"]:
+        print(f"[freshness] {'WARN' if a.allow_stale else 'STALE'}: {fresh['message']}")
+    else:
+        print(f"[freshness] OK: {fresh['message']}")
+    publish_blocked = bool(a.web) and fresh["stale"] and not a.allow_stale
 
     rows = scan(bundle)
 
@@ -178,9 +197,23 @@ def main():
         binfo["board"] = board
     print("[board] " + " > ".join(f"{e['code']}:{e['tier']}" for e in board["entries"]))
 
-    if a.web:
+    if publish_blocked:
+        print("[freshness] SKIP: not writing dashboard JSON or updating the "
+              "ledger -- newest data is a completed session stale. Re-run once "
+              "the session posts, or pass --allow-stale to publish anyway.")
+    elif a.web:
+        stale_meta = None
+        if fresh["stale"]:
+            stale_meta = {
+                "latest_bar": fresh["latest"].isoformat(),
+                "expected_session": fresh["expected"].isoformat(),
+                "missing_sessions": fresh["missing_sessions"],
+            }
+            if fresh.get("freshest") and fresh["freshest"] > fresh["latest"]:
+                stale_meta["freshest_symbol"] = fresh["freshest"].isoformat()
         path = write_web(rows, a.web, scanned=len(bundle), universe=len(syms),
-                         market=a.market, bench=binfo, pattern=pattern_meta)
+                         market=a.market, bench=binfo, pattern=pattern_meta,
+                         stale=stale_meta)
         print(f"[scan] -> {path} (+ dated snapshot)")
         if not a.no_ledger:
             update_ledger(rows, bundle, a.market, out_dir=a.web)
@@ -190,6 +223,9 @@ def main():
         write_report(rows, out, scanned=len(bundle), universe=len(syms),
                      market=a.market, bench=binfo)
         print(f"[scan] HTML report -> {out}")
+
+    if publish_blocked:
+        sys.exit(3)
 
 if __name__ == "__main__":
     main()

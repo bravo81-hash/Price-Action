@@ -117,7 +117,7 @@ def write_fvs_feed(rows, out_dir="docs", *, generated, bench=None) -> str:
 
 
 def write_web(rows, out_dir="docs", scanned=0, universe=0, keep=60, note=None,
-              market="us", bench=None, pattern=None):
+              market="us", bench=None, pattern=None, stale=None):
     mkt = MARKETS[market]
     suffix = "" if market == "us" else f"_{market}"
     data_dir = os.path.join(out_dir, "data")
@@ -138,6 +138,8 @@ def write_web(rows, out_dir="docs", scanned=0, universe=0, keep=60, note=None,
     }
     if note:
         payload["note"] = note
+    if stale:
+        payload["stale"] = stale
     if bench:
         payload["bench"] = bench
     if pattern:
