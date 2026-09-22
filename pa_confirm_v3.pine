@@ -1,0 +1,302 @@
+//@version=6
+// =====================================================================
+//  PA CONFIRM v3 — TradingView scanner companion
+//  Source app: bravo81-hash/Price-Action
+//  Source commit: 537f4f0127470e0ba74c595a5b247ae4ebc608b4
+//  Parity date: 2026-07-28
+//
+//    S1  Reversal at weekly level  - approach-direction + wick-tag gates
+//    S2  Trend pullback breakout   - freshness / volume / extension gates
+//    S3  Range / chop neutral       - quiet-name selection screen
+//    S4  Oversold snapback (LONG)   - experimental/context only
+//
+//  evening_star is retired (negative expectancy in every market).
+//  S1/S2 are candidate/context screens, not demonstrated directional alpha.
+//  S4 evidence: US EXPERIMENTAL, ASX AVOID, India CONTEXT. PRIME is retired.
+//
+//  Run on the DAILY timeframe; evaluate after the close.
+//  EvidenceTier: 6 PRIME, 5 PREFERRED, 4 EXPERIMENTAL, 3 CONTEXT,
+//                2 CAUTION, 1 AVOID, 0 no signal.
+//  SignalConfirmed is raw detection. EntryAuthorised is evidence-gated.
+//  ExitOrReduce is the ASX/India long-only risk action.
+//
+//  Approximation: weekly S/R uses the latest pivot; Python clusters multiple
+//  pivots into zones. App pattern lifecycle/SR/room-to-target remains richer.
+// =====================================================================
+indicator("PA Confirm v3", overlay=true)
+
+// ---------------- inputs ----------------
+grpW   = "Weekly trend / levels"
+fastW  = input.int(10, "Weekly EMA fast", group=grpW)
+slowW  = input.int(30, "Weekly EMA slow", group=grpW)
+leftW  = input.int(2,  "Weekly pivot left", group=grpW)
+rightW = input.int(2,  "Weekly pivot right", group=grpW)
+
+grpD       = "Daily signals"
+atrLen     = input.int(14,   "ATR length", group=grpD)
+nearAtr    = input.float(1.0, "S1 near band (x ATR)", step=0.25, group=grpD)
+wickFrac   = input.float(0.5, "S1 wick reach (x band)", step=0.25, group=grpD)
+holdFrac   = input.float(0.5, "S1 close hold (x band)", step=0.25, group=grpD)
+apprBars   = input.int(10,   "S1 approach bars (prior close median)", group=grpD)
+minBarAtr  = input.float(0.5, "S1 min bar range for 1-bar patterns (x ATR)", step=0.25, group=grpD)
+breakoutN  = input.int(7,    "S2 breakout window (Donchian)", group=grpD)
+pullbackLk = input.int(10,   "S2 pullback lookback (bars)", group=grpD)
+emaD       = input.int(20,   "Daily EMA (pullback ref)", group=grpD)
+maxAge     = input.int(1,    "S2 max breakout age (bars)", group=grpD)
+maxExtAtr  = input.float(1.5, "S2 max extension past trigger (x ATR)", step=0.25, group=grpD)
+volGate    = input.float(1.0, "S2 min volume vs prior-20 avg", step=0.1, group=grpD)
+
+grpS3      = "S3 range / chop"
+s3AdxMax   = input.float(20.0, "Max ADX", group=grpS3)
+s3RangeN   = input.int(20, "Range window", group=grpS3)
+s3PosLow   = input.float(0.30, "Min range position", step=0.05, group=grpS3)
+s3PosHigh  = input.float(0.70, "Max range position", step=0.05, group=grpS3)
+s3MinWidth = input.float(0.04, "Min width / price", step=0.01, group=grpS3)
+s3MaxWidth = input.float(0.25, "Max width / price", step=0.01, group=grpS3)
+s3EmaSep   = input.float(0.015, "Max EMA20/50 separation", step=0.005, group=grpS3)
+s3EdgeFrac = input.float(0.10, "Edge band / range", step=0.05, group=grpS3)
+
+grpS4     = "S4 oversold snapback (long only)"
+rsiMax    = input.float(15.0, "RSI(3) max", group=grpS4)
+streakMin = input.int(4, "Alt trigger: down-close streak", group=grpS4)
+
+grpB      = "Market / benchmark"
+market    = input.string("US", "Market template", options=["US", "ASX", "India"], group=grpB)
+benchUS   = input.symbol("AMEX:SPY", "US benchmark", group=grpB)
+benchASX  = input.symbol("ASX:XJO", "ASX benchmark", group=grpB)
+benchIN   = input.symbol("NSE:NIFTY", "India benchmark", group=grpB)
+showBench = input.bool(true, "Shade background on bench STAND-DOWN", group=grpB)
+benchSym  = market == "ASX" ? benchASX : market == "India" ? benchIN : benchUS
+
+grpV = "Visuals"
+showLvls = input.bool(true, "Show weekly S/R lines", group=grpV)
+showPanel = input.bool(true, "Show authority panel", group=grpV)
+showRisk  = input.bool(false, "Plot active stop / target", group=grpV)
+
+// ---------------- weekly data (no repaint) ----------------
+[wphH, wplL] = request.security(syminfo.tickerid, "W",
+     [ta.pivothigh(high, leftW, rightW), ta.pivotlow(low, leftW, rightW)],
+     lookahead=barmerge.lookahead_off)
+wEmaF     = request.security(syminfo.tickerid, "W", ta.ema(close, fastW),    lookahead=barmerge.lookahead_off)
+wEmaS     = request.security(syminfo.tickerid, "W", ta.ema(close, slowW),    lookahead=barmerge.lookahead_off)
+wEmaFprev = request.security(syminfo.tickerid, "W", ta.ema(close, fastW)[1], lookahead=barmerge.lookahead_off)
+
+var float lastRes = na
+var float lastSup = na
+if not na(wphH)
+    lastRes := wphH
+if not na(wplL)
+    lastSup := wplL
+
+upTrend = wEmaF > wEmaS and wEmaF > wEmaFprev
+dnTrend = wEmaF < wEmaS and wEmaF < wEmaFprev
+
+// ---------------- daily primitives ----------------
+atrD   = ta.atr(atrLen)
+ema_d  = ta.ema(close, emaD)
+ema50d = ta.ema(close, 50)
+[plusDI, minusDI, adxD] = ta.dmi(14, 14)
+donHi  = ta.highest(high, breakoutN)[1]
+donLo  = ta.lowest(low, breakoutN)[1]
+volAvg = ta.sma(volume, 20)[1]                  // prior-20 (excludes today)
+volx   = volAvg > 0 ? volume / volAvg : 0.0
+sma200 = ta.sma(close, 200)
+rsi3   = ta.rsi(close, 3)
+priorMed = ta.median(close, apprBars)[1]        // median of the prior N closes
+trendUpD = ema_d > ema50d and close >= ema_d and ema_d > ema_d[4] and plusDI >= minusDI and adxD >= 20
+trendDnD = ema_d < ema50d and close <= ema_d and ema_d < ema_d[4] and minusDI >= plusDI and adxD >= 20
+trendCode = trendUpD ? 1 : trendDnD ? -1 : 0
+
+var int dnStreak = 0
+dnStreak := close < close[1] ? dnStreak + 1 : 0
+
+body  = math.abs(close - open)
+upSh  = high - math.max(open, close)
+loSh  = math.min(open, close) - low
+bullC = close > open
+bearC = open > close
+barRangeOK = (high - low) >= minBarAtr * atrD   // 1-bar patterns need a real bar
+
+// ---------------- candlestick reversals (evening_star retired) ----------------
+bullEngulf = bullC and (close[1] < open[1]) and close >= open[1] and open <= close[1]
+bearEngulf = bearC and (close[1] > open[1]) and open >= close[1] and close <= open[1]
+hammer     = barRangeOK and loSh >= 2 * body and upSh <= body and body > 0
+shooting   = barRangeOK and upSh >= 2 * body and loSh <= body and body > 0
+piercing   = (close[1] < open[1]) and bullC and open < close[1] and close > (open[1] + close[1]) / 2 and close < open[1]
+darkCloud  = (close[1] > open[1]) and bearC and open > close[1] and close < (open[1] + close[1]) / 2 and close > open[1]
+mornStar   = (close[2] < open[2]) and (math.abs(close[1] - open[1]) < math.abs(close[2] - open[2]) * 0.5) and bullC and close > (open[2] + close[2]) / 2
+tweezBot   = barRangeOK and (close[1] < open[1]) and bullC and math.abs(low - low[1])  <= low  * 0.001
+tweezTop   = barRangeOK and (close[1] > open[1]) and bearC and math.abs(high - high[1]) <= high * 0.001
+
+bullRev = bullEngulf or hammer or piercing or mornStar or tweezBot
+bearRev = bearEngulf or shooting or darkCloud or tweezTop
+
+// ---------------- S1: reversal at weekly level (approach + wick gates) ----------------
+band = atrD * nearAtr
+wick = band * wickFrac
+hold = band * holdFrac
+
+s1Long  = not na(lastSup) and bullRev and priorMed > lastSup and low <= lastSup + wick and close >= lastSup - hold and close <= lastSup + band
+s1Short = not na(lastRes) and bearRev and priorMed < lastRes and high >= lastRes - wick and close <= lastRes + hold and close >= lastRes - band
+
+// ---------------- S2: fresh, unextended, volume-confirmed breakout ----------------
+pulledUp = ta.barssince(low  <= ema_d) <= pullbackLk and close > ema_d
+pulledDn = ta.barssince(high >= ema_d) <= pullbackLk and close < ema_d
+
+crossUp  = close > donHi and close[1] <= donHi[1]
+crossDn  = close < donLo and close[1] >= donLo[1]
+ageUp    = ta.barssince(crossUp)
+ageDn    = ta.barssince(crossDn)
+extUp    = atrD > 0 ? (close - donHi) / atrD : 99.0
+extDn    = atrD > 0 ? (donLo - close) / atrD : 99.0
+
+s2Long  = upTrend and pulledUp and close > donHi and not na(ageUp) and ageUp <= maxAge and extUp <= maxExtAtr and volx >= volGate
+s2Short = dnTrend and pulledDn and close < donLo and not na(ageDn) and ageDn <= maxAge and extDn <= maxExtAtr and volx >= volGate
+
+// ---------------- S3: established, stable range / chop ----------------
+rngHi = ta.highest(high, s3RangeN)
+rngLo = ta.lowest(low, s3RangeN)
+rngWidth = rngHi - rngLo
+rngPos = rngWidth > 0 ? (close - rngLo) / rngWidth : 0.5
+rngWidthPct = close > 0 ? rngWidth / close : 0.0
+emaSepPct = close > 0 ? math.abs(ema_d - ema50d) / close : 99.0
+rngMid = (rngHi + rngLo) / 2.0
+rangeCrosses = 0
+for i = 0 to s3RangeN - 2
+    rangeCrosses += (close[i] > rngMid) != (close[i + 1] > rngMid) ? 1 : 0
+edgeBand = s3EdgeFrac * rngWidth
+edgeCloses = 0
+for i = 0 to 2
+    edgeCloses += close[i] > rngHi - edgeBand or close[i] < rngLo + edgeBand ? 1 : 0
+s3Neutral = adxD < s3AdxMax and emaSepPct <= s3EmaSep and
+     rngWidthPct >= s3MinWidth and rngWidthPct <= s3MaxWidth and
+     rngPos >= s3PosLow and rngPos <= s3PosHigh and edgeCloses <= 1
+
+// ---------------- S4: oversold snapback (long only; experimental) ----------------
+s4RsiTrig    = rsi3 < rsiMax and dnStreak >= 2
+s4StreakTrig = dnStreak >= streakMin
+s4Long = not na(sma200) and close > sma200 and (s4RsiTrig or s4StreakTrig)
+
+// ---------------- benchmark stand-down (DMI-aligned with app) ----------------
+f_bench() =>
+    [pdi, mdi, adx] = ta.dmi(14, 14)
+    [close, ta.ema(close, 20), ta.ema(close, 50), ta.ema(close, 20)[4], pdi, mdi, adx]
+
+[bClose, bEmaF, bEmaS, bEmaF4, bPdi, bMdi, bAdx] =
+     request.security(benchSym, "D", f_bench(), lookahead=barmerge.lookahead_off)
+benchBear = bEmaF < bEmaS and bClose <= bEmaF and bEmaF < bEmaF4 and bMdi >= bPdi and bAdx >= 20
+bgcolor(showBench and benchBear ? color.new(color.red, 92) : na, title="Bench STAND-DOWN (S1/S2)")
+
+// ---------------- evidence and action authority ----------------
+T_PRIME = 6
+T_PREFERRED = 5
+T_EXPERIMENTAL = 4
+T_CONTEXT = 3
+T_CAUTION = 2
+T_AVOID = 1
+
+s1Hit = s1Long or s1Short
+s2Hit = s2Long or s2Short
+s1Tier = not s1Hit ? 0 : market == "India" ? (s1Short ? T_PREFERRED : T_CONTEXT) : benchBear ? T_AVOID : T_CONTEXT
+s2Tier = not s2Hit ? 0 : market == "India" ? (s2Long ? T_EXPERIMENTAL : T_CONTEXT) : benchBear ? T_AVOID : market == "US" ? T_CAUTION : T_CONTEXT
+s3Tier = s3Neutral ? (market == "US" ? T_PREFERRED : T_CONTEXT) : 0
+s4Tier = s4Long ? (market == "US" ? T_EXPERIMENTAL : market == "ASX" ? T_AVOID : T_CONTEXT) : 0
+evidenceTier = math.max(math.max(s1Tier, s2Tier), math.max(s3Tier, s4Tier))
+signalConfirmed = s1Hit or s2Hit or s3Neutral or s4Long
+
+selS1 = s1Hit and s1Tier == evidenceTier
+selS2 = not selS1 and s2Hit and s2Tier == evidenceTier
+selS3 = not selS1 and not selS2 and s3Neutral and s3Tier == evidenceTier
+selS4 = not selS1 and not selS2 and not selS3 and s4Long
+selectedLong = (selS1 and s1Long) or (selS2 and s2Long) or selS4
+selectedShort = (selS1 and s1Short) or (selS2 and s2Short)
+selectedNeutral = selS3
+
+entryAuthorised = market != "US" and signalConfirmed and evidenceTier >= T_PREFERRED and
+     selectedLong and trendCode >= 0
+exitOrReduce = market != "US" and selectedShort and trendCode != 0
+
+signalTxt = selS1 ? (s1Long ? "S1 LONG" : "S1 SHORT") :
+     selS2 ? (s2Long ? "S2 LONG" : "S2 SHORT") :
+     selS3 ? "S3 NEUTRAL" : selS4 ? "S4 LONG" : "NONE"
+evidenceTxt = evidenceTier == T_PRIME ? "PRIME" :
+     evidenceTier == T_PREFERRED ? "PREFERRED" :
+     evidenceTier == T_EXPERIMENTAL ? "EXPERIMENTAL" :
+     evidenceTier == T_CONTEXT ? "CONTEXT" :
+     evidenceTier == T_CAUTION ? "CAUTION" :
+     evidenceTier == T_AVOID ? "AVOID" : "—"
+actionTxt = exitOrReduce ? (trendCode > 0 ? "REDUCE" : "EXIT") :
+     entryAuthorised ? "ENTRY AUTHORISED" :
+     signalConfirmed ? (evidenceTier == T_AVOID ? "AVOID" : market == "US" ? "APP CHECK REQUIRED" : "WATCH / CONTEXT") : "—"
+
+positionTemplate = (market == "India" and selS2 and selectedLong) or (market == "ASX" and selS4)
+stopK = positionTemplate ? 3.5 : 2.0
+targetK = positionTemplate ? 4.5 : 1.5
+timeBars = positionTemplate ? 63 : selS4 ? 5 : 10
+stopLevel = not signalConfirmed ? float(na) : selectedLong ? close - stopK * atrD :
+     selectedShort ? close + stopK * atrD : rngLo
+targetLevel = not signalConfirmed ? float(na) : selectedLong ? close + targetK * atrD :
+     selectedShort ? close - targetK * atrD : rngHi
+
+// ---------------- visuals ----------------
+plot(showLvls ? lastSup : na, "Wk Support",    color=color.new(color.teal, 0),   style=plot.style_linebr, linewidth=1)
+plot(showLvls ? lastRes : na, "Wk Resistance", color=color.new(color.maroon, 0), style=plot.style_linebr, linewidth=1)
+plot(showRisk ? stopLevel : na, "Active Stop", color=color.new(color.red, 10), style=plot.style_linebr)
+plot(showRisk ? targetLevel : na, "Active Target", color=color.new(color.green, 10), style=plot.style_linebr)
+
+plotshape(s1Long,  title="S1 Long",  location=location.belowbar, style=shape.triangleup,   color=color.teal,   size=size.small, text="S1")
+plotshape(s1Short, title="S1 Short", location=location.abovebar, style=shape.triangledown, color=color.maroon, size=size.small, text="S1")
+plotshape(s2Long,  title="S2 Long",  location=location.belowbar, style=shape.labelup,      color=color.green,  size=size.small, text="S2")
+plotshape(s2Short, title="S2 Short", location=location.abovebar, style=shape.labeldown,    color=color.red,    size=size.small, text="S2")
+plotshape(s3Neutral, title="S3 Neutral", location=location.bottom, style=shape.square, color=color.blue, size=size.tiny, text="S3")
+plotshape(s4Long,  title="S4 Long",  location=location.belowbar, style=shape.diamond,      color=color.lime,   size=size.small, text="S4")
+
+// ---------------- Pine Screener columns ----------------
+plot(s1Long  ? 1 : 0, "S1_Long",  display=display.data_window)
+plot(s1Short ? 1 : 0, "S1_Short", display=display.data_window)
+plot(s2Long  ? 1 : 0, "S2_Long",  display=display.data_window)
+plot(s2Short ? 1 : 0, "S2_Short", display=display.data_window)
+plot(s3Neutral ? 1 : 0, "S3_Neutral", display=display.data_window)
+plot(s4Long  ? 1 : 0, "S4_Long",  display=display.data_window)
+plot(signalConfirmed ? 1 : 0, "SignalConfirmed", display=display.data_window)
+plot(evidenceTier, "EvidenceTier", display=display.data_window)
+plot(entryAuthorised ? 1 : 0, "EntryAuthorised", display=display.data_window)
+plot(exitOrReduce ? 1 : 0, "ExitOrReduce", display=display.data_window)
+plot(stopLevel, "Stop", display=display.data_window)
+plot(targetLevel, "Target", display=display.data_window)
+plot(signalConfirmed ? timeBars : 0, "TimeBars", display=display.data_window)
+plot(upTrend ? 1 : (dnTrend ? -1 : 0), "WeeklyTrend", display=display.data_window)
+plot(trendCode, "DailyTrend", display=display.data_window)
+plot(benchBear ? 1 : 0, "BenchBear", display=display.data_window)
+plot(rsi3,               "RSI3",     display=display.data_window)
+plot(dnStreak,           "DnStreak", display=display.data_window)
+plot(volx,               "VolX",     display=display.data_window)
+
+// ---------------- compact authority panel ----------------
+var table panel = table.new(position.top_right, 2, 6, frame_width=1, border_width=1)
+if barstate.islast and showPanel
+    table.cell(panel, 0, 0, "PA CONFIRM v3", text_color=color.white, bgcolor=color.new(#1e222d, 0))
+    table.cell(panel, 1, 0, market, text_color=color.silver, bgcolor=color.new(#1e222d, 0))
+    table.cell(panel, 0, 1, "SIGNAL", text_color=color.silver)
+    table.cell(panel, 1, 1, signalTxt, text_color=color.white)
+    table.cell(panel, 0, 2, "EVIDENCE", text_color=color.silver)
+    table.cell(panel, 1, 2, evidenceTxt, text_color=color.white, bgcolor=evidenceTier == T_AVOID ? color.new(color.red, 20) : evidenceTier >= T_PREFERRED ? color.new(color.green, 25) : color.new(color.orange, 35))
+    table.cell(panel, 0, 3, "AUTHORITY", text_color=color.silver)
+    table.cell(panel, 1, 3, actionTxt, text_color=color.white)
+    table.cell(panel, 0, 4, "RISK", text_color=color.silver)
+    table.cell(panel, 1, 4, signalConfirmed ? "Stop " + str.tostring(stopLevel, format.mintick) + " · Target " + str.tostring(targetLevel, format.mintick) : "—", text_color=color.white)
+    table.cell(panel, 0, 5, "TIME", text_color=color.silver)
+    table.cell(panel, 1, 5, signalConfirmed ? str.tostring(timeBars) + " bars" : "—", text_color=color.white,
+         tooltip="Standard 2 ATR stop / 1.5 ATR target / 10 bars. S4 uses 5 bars. India S2-long and ASX S4 use 3.5 ATR / 4.5 ATR / 63 bars.")
+else if barstate.islast
+    table.clear(panel, 0, 0, 1, 5)
+
+// ---------------- alerts ----------------
+alertcondition(s1Long,  "Context: S1 long",   "S1 candidate context at weekly support; check EvidenceTier and EntryAuthorised")
+alertcondition(s1Short, "Context: S1 short",  "S1 candidate/risk context at weekly resistance; check EvidenceTier and ExitOrReduce")
+alertcondition(s2Long,  "Context: S2 long",   "S2 candidate context: fresh pullback breakout; check EvidenceTier and EntryAuthorised")
+alertcondition(s2Short, "Context: S2 short",  "S2 candidate/risk context: fresh breakdown; check EvidenceTier and ExitOrReduce")
+alertcondition(s3Neutral, "Context: S3 neutral", "S3 range/chop candidate; option expectancy remains untested")
+alertcondition(s4Long,  "Context: S4 snapback", "S4 candidate: US experimental, ASX avoid, India context")
+alertcondition(entryAuthorised, "Entry authorised", "Evidence-gated PA candidate is authorised by the selected market template")
+alertcondition(exitOrReduce, "Exit or reduce", "Long-only market risk action: inspect ExitOrReduce and the authority panel")
